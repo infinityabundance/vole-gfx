@@ -18,7 +18,7 @@ use super::detect::Proposal;
 use crate::color::{ColorFormat, Rgba};
 use crate::ir::{Document, Instance, Object};
 use crate::procedural::build;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Sprite side cap for the component crops (search bound).
 const MAX_CROP_DIM: u32 = 512;
@@ -31,17 +31,31 @@ fn code_key(asset: &Asset, o: usize) -> [u8; 4] {
     c
 }
 
-/// Most frequent code value (the field color).  O(n) with a bounded table.
+/// Most frequent code value (the field color), deterministically chosen.
+///
+/// Selection rule (normative for the inverse search): highest frequency;
+/// ties broken by the **earliest row-major first occurrence** (a
+/// representation-natural rule that never privileges a color's numerical
+/// value); a further tie is impossible for distinct codes (a single pixel
+/// has one code) and would fall back to the lower code value.
+///
+/// The accumulator is a `BTreeMap` (deterministic key order) so the winner
+/// is process-independent; `HashMap` iteration order is deliberately
+/// randomized and must never influence a search decision.
 fn field_color(asset: &Asset) -> Option<[u8; 4]> {
-    let mut counts: HashMap<[u8; 4], u64> = HashMap::new();
+    // code -> (count, first row-major index)
+    let mut tab: BTreeMap<[u8; 4], (u64, u64)> = BTreeMap::new();
     for j in 0..asset.h {
         for i in 0..asset.w {
-            *counts
-                .entry(code_key(asset, asset.offset(i, j)))
-                .or_default() += 1;
+            let idx = (j as u64) * asset.w as u64 + i as u64;
+            let k = code_key(asset, asset.offset(i, j));
+            let e = tab.entry(k).or_insert((0, idx));
+            e.0 += 1;
         }
     }
-    counts.into_iter().max_by_key(|&(_, n)| n).map(|(c, _)| c)
+    tab.into_iter()
+        .max_by_key(|&(_, (count, first))| (count, std::cmp::Reverse(first)))
+        .map(|(c, _)| c)
 }
 
 /// A connected component of non-field pixels: its content crop rectangle and
@@ -235,5 +249,113 @@ pub fn propose(asset: &Asset, out: &mut Vec<Proposal>) {
             doc: composite_doc(field, sprite, &at),
             work: scan_work,
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::color::Rgba;
+
+    fn asset_of(data: &[[u8; 4]], w: u32, h: u32) -> Asset {
+        let bytes: Vec<u8> = data.iter().flatten().copied().collect();
+        Asset::new(w, h, ColorFormat::Rgba8, bytes).unwrap()
+    }
+
+    fn rgba(r: u8, g: u8, b: u8) -> [u8; 4] {
+        [r, g, b, 255]
+    }
+
+    #[test]
+    fn field_color_prefers_higher_frequency() {
+        // 6 red, 2 green: red wins regardless of order of first appearance.
+        let a = rgba(255, 0, 0);
+        let b = rgba(0, 255, 0);
+        // green appears first, but red is more frequent
+        let data = vec![b, a, a, a, b, a, a, a];
+        let asset = asset_of(&data, 8, 1);
+        assert_eq!(field_color(&asset), Some(a));
+    }
+
+    /// Adversarial tie: two colors with EXACTLY equal frequency.  The winner
+    /// must be the color whose first occurrence is earliest in row-major
+    /// order, process-independently (BTreeMap selection, no HashMap
+    /// iteration anywhere in the decision).
+    #[test]
+    fn field_color_tie_breaks_by_first_row_major_occurrence() {
+        // 4 red then 4 green: equal counts; red first appears at index 0,
+        // green at index 4 -> red must win.
+        let a = rgba(255, 0, 0);
+        let b = rgba(0, 0, 255);
+        let mut row = Vec::new();
+        for _ in 0..4 {
+            row.push(a);
+        }
+        for _ in 0..4 {
+            row.push(b);
+        }
+        let asset = asset_of(&row, 8, 1);
+        assert_eq!(field_color(&asset), Some(a));
+
+        // interleaved tie: a,b,a,b,a,b,a,b: a first at 0, b first at 1 -> a
+        let mut inter = Vec::new();
+        for k in 0..8 {
+            inter.push(if k % 2 == 0 { a } else { b });
+        }
+        let asset2 = asset_of(&inter, 8, 1);
+        assert_eq!(field_color(&asset2), Some(a));
+
+        // 2D tie across rows: top row all b, second row all a (equal counts,
+        // same first column): b first at row 0 -> b wins by row-major order.
+        let mut grid = Vec::new();
+        for _ in 0..4 {
+            grid.push(b); // row 0: b
+        }
+        for _ in 0..4 {
+            grid.push(a); // row 1: a
+        }
+        let asset3 = asset_of(&grid, 4, 2);
+        assert_eq!(field_color(&asset3), Some(b));
+    }
+
+    /// Repeated evaluation must be process-independent: same asset, many
+    /// fresh accumulator instances, always the same winner.
+    #[test]
+    fn field_color_deterministic_across_repeated_runs() {
+        let a = rgba(200, 0, 0);
+        let b = rgba(0, 200, 0);
+        let c = rgba(0, 0, 200);
+        let mut data = Vec::new();
+        // counts: a=8, b=8, c=4 with a's first occurrence earliest
+        for k in 0..4 {
+            data.push(a);
+        }
+        for _ in 0..4 {
+            data.push(b);
+        }
+        for _ in 0..4 {
+            data.push(c);
+        }
+        for _ in 0..4 {
+            data.push(a);
+        }
+        for _ in 0..4 {
+            data.push(b);
+        }
+        let asset = asset_of(&data, 10, 2);
+        for _ in 0..32 {
+            assert_eq!(field_color(&asset), Some(a));
+        }
+    }
+
+    #[test]
+    fn gray_tie_rule() {
+        // gray asset: two gray levels at equal frequency; earlier row-major
+        // occurrence wins (values 200 vs 40: the numeric value must NOT
+        // decide the tie).
+        let mut d = vec![200u8, 200, 40, 40];
+        d.extend_from_slice(&[200, 200, 40, 40]);
+        let asset = Asset::new(8, 1, ColorFormat::Gray8, d).unwrap();
+        assert_eq!(field_color(&asset), Some([200, 0, 0, 0]));
     }
 }
