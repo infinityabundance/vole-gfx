@@ -95,12 +95,29 @@ fn validate_objects(doc: &Document) -> Result<(), Reject> {
                 }
                 let _ = i; // index itself is the identity; nothing else to check
             }
-            Object::GeneratorField { params, .. } => {
+            Object::GeneratorField {
+                family,
+                w,
+                h,
+                params,
+            } => {
                 if params.len() as u64 > doc.limits.max_generator_params {
                     return Err(Reject::BytesExceedsLimit);
                 }
-                // Grammar-only until the procedural phase lands.
-                return Err(Reject::UnsupportedProfile);
+                if *w as u64 > doc.limits.max_dimension as u64
+                    || *h as u64 > doc.limits.max_dimension as u64
+                {
+                    return Err(Reject::DimensionTooLarge);
+                }
+                if *w > crate::limits::MAX_OBJECT_DIM || *h > crate::limits::MAX_OBJECT_DIM {
+                    return Err(Reject::DimensionTooLarge);
+                }
+                if !crate::procedural::family::is_known(*family) {
+                    return Err(Reject::UnknownTag);
+                }
+                // Family parameters: canonical shape, extent-relative ranges,
+                // referenced-object kinds (full procedural semantics, Phase H).
+                crate::procedural::validate_field_object(*family, *w, *h, params, &doc.objects)?;
             }
         }
     }
@@ -187,7 +204,9 @@ fn check_placement(
         .get(object as usize)
         .ok_or(Reject::MissingObject)?;
     match obj {
-        Object::Raster { w, h, .. } | Object::IndexedRaster { w, h, .. } => {
+        Object::Raster { w, h, .. }
+        | Object::IndexedRaster { w, h, .. }
+        | Object::GeneratorField { w, h, .. } => {
             let local = crate::fixed::RectF::from_px(0, 0, *w as i32, *h as i32);
             let bbox = transform.bounds_of(local);
             if (bbox.x0 as i64).abs() > crate::limits::PLACEMENT_BBOX_LIMIT
@@ -198,7 +217,7 @@ fn check_placement(
                 return Err(Reject::CoordinateOutOfRange);
             }
         }
-        Object::Palette { .. } | Object::GeneratorField { .. } => {}
+        Object::Palette { .. } => {}
     }
     // Translation caps (static part, and any trajectory's keys).
     let cap = |v: i32| (v as i64).abs() <= crate::limits::INST_TRANSLATION_LIMIT;

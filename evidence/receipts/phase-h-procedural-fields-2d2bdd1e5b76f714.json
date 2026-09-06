@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "run_id": "phase-h-procedural-fields-2d2bdd1e5b76f714",
+  "timestamp_unix_ms": 1788736776124,
+  "git_commit": "4bcd1046e14574973e33324481e2106949fafb44",
+  "git_dirty": true,
+  "command": "target/release/examples/phase_h_gate",
+  "court": "phase-h-procedural-fields",
+  "universe": "vole.gfx.u1",
+  "profile": "exact-u1",
+  "backend": "matrix",
+  "exact": true,
+  "inputs": {
+    "court": "procedural-1080p-10-families"
+  },
+  "outputs": {
+    "auto_dispatch_path": "blocked",
+    "canonical_hash": "a902bba0065fa6d04db32034a2343c475343f1e81e38f64aa4379cb03bf29525",
+    "constant_subset_path": "avx2",
+    "family10_work": "8",
+    "family1_work": "1",
+    "family2_work": "16",
+    "family3_work": "2",
+    "family4_work": "2",
+    "family5_work": "1",
+    "family6_work": "16",
+    "family7_work": "1",
+    "family8_work": "49",
+    "family9_work": "8",
+    "gray_hash": "0f5fd225ae64f941ddcef386170af68362f0f54b811cec35d3a094a35229425a",
+    "surface": "1920x1080 rgba8",
+    "time_0_hash": "f7ac8bb56384b8e491cbc64fb8706999a6a0d939207d01fb9ef6aaa066dd8d65",
+    "time_144444444_hash": "afd02af8c9026fb249d31f11b49854f2320a31540a85e58f494fd3360e21efe8",
+    "time_16666667_hash": "8f5e25d9231ec279dd3dad3823f49eb34ccd580166baf77db50a22831bc2db36",
+    "time_33333333_hash": "457ea6e5c5dda94a9c387fddab5daab994d91a5dcdb8c60f32f019e90f33d1be",
+    "time_987654321_hash": "afd02af8c9026fb249d31f11b49854f2320a31540a85e58f494fd3360e21efe8",
+    "work_fraction_1pct": "0.0100"
+  },
+  "canonical_hash": "a902bba0065fa6d04db32034a2343c475343f1e81e38f64aa4379cb03bf29525",
+  "reference_hash": "a902bba0065fa6d04db32034a2343c475343f1e81e38f64aa4379cb03bf29525",
+  "metrics": {
+    "band-32_samples": 61440,
+    "blocked_full_ns": 161043178,
+    "constant_subset_auto_ns": 113542,
+    "full_samples": 2073600,
+    "instances": 11,
+    "irregular_samples": 5,
+    "objects": 11,
+    "oracle_full_ns": 163462350,
+    "region-1pct_samples": 20736,
+    "scanline_samples": 1920,
+    "sum_work_units_per_sample": 104,
+    "tile-64_samples": 4096
+  },
+  "quality_metric": null,
+  "quality_value": null,
+  "persistent_bytes": 2403,
+  "residual_bytes": 0,
+  "samples_requested": 0,
+  "samples_evaluated": 0,
+  "pass": true,
+  "unsupported_reason": null,
+  "notes": [
+    "samples evaluated == samples requested for every shape (10 families, cost 104 units/sample); region-1pct work fraction 0.0100",
+    "state queried at 5 arbitrary observation times over a moving trajectory: 4 distinct region hashes (motion observed, cadence-independent)"
+  ],
+  "environment": {
+    "cpu": {
+      "vendor_model": ": AMD Ryzen 7 9800X3D 8-Core Processor",
+      "cores": 16,
+      "avx2": true,
+      "avx512_subfeatures": [
+        "avx512f",
+        "avx512dq",
+        "avx512ifma",
+        "avx512cd",
+        "avx512bw",
+        "avx512vl",
+        "avx512_bf16",
+        "avx512vbmi",
+        "avx512_vbmi2",
+        "avx512_vnni",
+        "avx512_bitalg",
+        "avx512_vpopcntdq",
+        "avx512_vp2intersect"
+      ]
+    },
+    "gpu": {
+      "present": true,
+      "name": "NVIDIA GeForce RTX 4080 SUPER",
+      "driver": "610.57.04",
+      "cuda_umd": "NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  610.57.04  Release Build  (root@vanir)"
+    },
+    "compiler": {
+      "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8",
+      "rustc_version": "1.98.0",
+      "llvm": "22.1.8",
+      "profile": null,
+      "target_cpu": null
+    },
+    "system": {
+      "os": "linux",
+      "kernel": "7.2.2-1-cachyos"
+    },
+    "git_commit": "4bcd1046e14574973e33324481e2106949fafb44",
+    "git_dirty": true
+  },
+  "receipt_hash": "8c09cd7709f8201e73df579a5dd95bbb1f5caf5f816f22e101240d5792511fe5"
+}

@@ -37,6 +37,8 @@ layouts, compile-time semantics constants; the semantic core (`limits`,
 
 ## Next steps
 
-Generator evaluation kernels (direct seeded evaluation, Phase H), the CUDA
-inverse-search batching (Phase M), and the external-resource/display path
-(Phases S–T, hardware-gated).  Every claim stays scoped to receipts.
+Generator evaluation stays CPU-only in Phase H (the CONSTANT family rides
+ the fill fast path; other families run exact scalar/blocked evaluation).
+CUDA generator kernels (direct seeded evaluation), the CUDA inverse-search
+batching (Phase M), and the external-resource/display path (Phases S–T,
+hardware-gated) are future work.  Every claim stays scoped to receipts.

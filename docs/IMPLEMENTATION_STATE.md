@@ -23,7 +23,7 @@ Cargo package (`vole-gfx`); no workspace, no subcrates.
 | E | AVX-512 backend | implemented | cpu-backend-matrix (e) |
 | F | Rayon + SIMD | implemented | cpu-backend-matrix (f) |
 | G | Rust CUDA PTX device + host | implemented (byte-kernel parity) | phase-g |
-| H | Procedural state, generators, trajectories | pending | – |
+| H | Procedural state, generators, trajectories | implemented | phase-h |
 | I–N | Inverse compiler (scalar/SIMD/Rayon/CUDA, DSFB) | pending | – |
 | O | Corpus (100+ assets) + negative controls | pending | – |
 | P–R | No-rebake / observation / partial courts | pending | – |
@@ -33,7 +33,7 @@ Cargo package (`vole-gfx`); no workspace, no subcrates.
 | W | Heterogeneous autotuning (train/val/test) | pending | – |
 | X | Full evidence/Pareto seal | pending | – |
 
-## What Phases A–G implemented (committed, tested, receipted)
+## What Phases A–H implemented (committed, tested, receipted)
 
 - **Exact universe `vole.gfx.u1`**: Q16.16 fixed-point geometry, sample-center
   coverage, half-open rectangles, widened intermediates, overflow-safe
@@ -95,29 +95,61 @@ Cargo package (`vole-gfx`); no workspace, no subcrates.
 - **CLI** (`src/bin/vole-gfx.rs`): `universe`, `inspect`, `validate`,
   `canonicalize`, `materialize`, `evidence verify`, `encode` (JSON authoring
   pending), `example` runner.
-- **Tests**: ~130 unit + integration tests (unit, conformance vectors,
-  differential backends, scalar materialize, adversarial/property) plus
-  criterion benches; fmt + clippy `-D warnings` clean on default and `cuda`
-  features.
+- **Tests**: ~190 unit + integration tests (unit, conformance vectors,
+  differential backends, procedural fields, scalar materialize,
+  adversarial/property) plus criterion benches; fmt + clippy `-D warnings`
+  clean on default and `cuda` features.
 
-## Explicit non-claims (as of Phase G)
+## What Phase H added (procedural state)
+
+- **Generator field objects** (`Object::GeneratorField { family, w, h,
+  params }`) with raster-like addressing and **direct seeded evaluation**: a
+  requested sample evaluates the field at that lattice point only; no
+  whole-object raster is ever produced (no-mandatory-re-baking boundary per
+  sample).  Partial requests cost partial work — the phase-h gate measured
+  `samples_evaluated == samples_requested` for every request shape on a
+  1920×1080 ten-family court, with a 1% region costing 1% of samples.
+- **Ten bounded generator families** (`procedural::families`): constant,
+  gradient (linear + bilinear), palette-field (hash/ramp/band index modes),
+  periodic (stripes/checker), tiled (embedded tile), affine-reuse
+  (referenced-object sampling), deterministic hash field, fractal value
+  noise, SDF disc/box, and object-family grids — each with a canonical
+  versioned param wire encoding, semantic validation (incl. referenced-object
+  rules and extent-relative anchors), exact deterministic evaluation shared
+  by every backend through one sampler, and a bounded work-unit cost
+  estimator.
+- **Materialization**: the scalar oracle and block materializer sample
+  generator objects through one shared sampler (`sample_placed`); constant
+  generator fields are eligible for the fill-based fast path (AVX2 fills,
+  measured ~113 µs for the constant 1080p subset) while all other families
+  run the exact scalar/blocked path in this phase (recorded decision).
+  Placed generator fields take part in dependency indexing via their extent.
+- **Exactness evidence**: pinned conformance SHA-256 vectors for the mixed
+  ten-family scene (RGBA/Gray8, two times); differential tests across
+  scalar/blocked/rayon/auto for full/region/tile/band/irregular domains;
+  adversarial param blobs fail closed at decode and validation.
+
+## Explicit non-claims (as of Phase H)
 
 No claim of inverse compilation or unbaking (Phases I–N pending). No claim
-that any generator explains pixels. No claim that CUDA beats CPU or vice
-versa beyond the exact receipted domains (byte-kernel parity and the
-cpu-backend-matrix rows on this host). No claim of procedural *computing*
-from storage savings (no-rebake court is Phase P). No direct-display claim
-(Phases S–T unsupported pending hardware path verification). No claim that
-AVX-512 is faster than AVX2 — the retained measurement says the opposite on
-this court. CUDA equality is claimed only on hosts with a genuine NVIDIA
-device; elsewhere it is `not evaluated on this host`.
+that any generator "explains" pixels. No claim that generator fields beat
+raster storage (the no-mandatory-re-baking court is Phase P). No CUDA
+claim for generators: generator evaluation is CPU-only in Phase H (device
+kernels for fields are future work; byte-kernel parity is the only CUDA
+claim). Only the CONSTANT family participates in the SIMD fill fast path in
+Phase H; other families run exact scalar/blocked evaluation (acceleration of
+their row generation is a measured follow-up). Palette fields embed their
+palette in the params and are not animatable by timeline `PaletteSet` ops in
+this phase. No claim that CUDA beats CPU or vice versa beyond the exact
+receipted domains. No claim that AVX-512 is faster than AVX2 — the retained
+phase-e measurement says the opposite on this court. No direct-display claim (Phases S–T unsupported pending
+hardware path verification). CUDA equality is claimed only on hosts with a
+genuine NVIDIA device; elsewhere it is `not evaluated on this host`.
 
 ## What each phase must add before completion
 
-- H: seeded procedural generator objects (`O = Γ(U, s, θ)`) with canonical
-  parameters, bounded cost estimators, exact deterministic evaluation,
-  scalar + accelerated materialization, and direct seeded evaluation (no
-  object re-baking).
+- H: implemented above (procedural state, ten generator families, exact
+  evaluation, direct seeded observation evidence).
 - I–N: the inverse procedural compiler ("unbaking") with structural reuse,
   Pareto accounting, residual-guided factorization, SIMD/Rayon/CUDA search
   acceleration, and the DSFB governor with zero authority over correctness.

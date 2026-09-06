@@ -198,7 +198,7 @@ fn draw_base(scene: &Scene<'_>, cx: Vec2, depth: u32, c: &mut Counters) -> Resul
     let mut cur = Rgba::TRANSPARENT;
     for inst in &scene.instances {
         c.instance_tests += 1;
-        let Some(local) = sample_instance(scene, inst, cx) else {
+        let Some(local) = sample_placed(scene, inst, cx) else {
             continue;
         };
         c.instance_draws += 1;
@@ -278,7 +278,13 @@ fn covers_shifted(cx: Vec2, r: &crate::fixed::RectF, dx: i32, dy: i32) -> bool {
 
 /// Sample one placed instance at scene point `cx`.  Returns `None` when the
 /// instance does not cover the sample (bounds, clip, or local out-of-range).
-fn sample_instance(scene: &Scene<'_>, inst: &PlacedInstance<'_>, cx: Vec2) -> Option<Rgba> {
+/// This is the shared sampling rule for every backend: the scalar oracle, the
+/// block materializer, and generator-family reference sampling all use it.
+pub(crate) fn sample_placed(
+    scene: &Scene<'_>,
+    inst: &PlacedInstance<'_>,
+    cx: Vec2,
+) -> Option<Rgba> {
     if let Some(clip) = inst.clip
         && !((cx.x as i64) >= (clip.x0 as i64)
             && (cx.x as i64) < (clip.x1 as i64)
@@ -332,7 +338,15 @@ fn sample_instance(scene: &Scene<'_>, inst: &PlacedInstance<'_>, cx: Vec2) -> Op
             });
             scene.palette(pal_id)?.get(idx)
         }
-        Object::Palette { .. } | Object::GeneratorField { .. } => None,
+        Object::GeneratorField { w, h, .. } => {
+            // Raster-like addressing: inverse-affine to the local integer
+            // pixel, bounds-check against the field extent, then evaluate the
+            // generator *at this sample only* (no object materialization —
+            // the "no mandatory re-baking" boundary holds per sample).
+            let (i, j) = in_bounds_pub(lx, ly, *w, *h)?;
+            scene.sample_field(inst.object, i, j)
+        }
+        Object::Palette { .. } => None,
     }
 }
 

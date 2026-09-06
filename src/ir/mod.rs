@@ -95,9 +95,18 @@ pub enum Object {
         h: u32,
         indices: Vec<u32>,
     },
-    /// Deterministic generator field; params opaque to the IR layer and
-    /// validated by the procedural module.  Grammar only until Phase H.
-    GeneratorField { family: u8, params: Vec<u8> },
+    /// Deterministic generator field object: an `w`x`h` local-pixel extent
+    /// whose sample at local pixel `(i,j)` is a pure, bounded function of the
+    /// versioned generator `family` and its canonical `params` blob (the
+    /// procedural module owns parameter semantics; the IR layer keeps the blob
+    /// opaque and validates size only).  Raster-like addressing: samples
+    /// outside the extent are out of bounds, exactly like `Raster`.
+    GeneratorField {
+        family: u8,
+        w: u32,
+        h: u32,
+        params: Vec<u8>,
+    },
 }
 
 impl Object {
@@ -110,7 +119,10 @@ impl Object {
         }
     }
     pub fn is_supported_exact(&self) -> bool {
-        !matches!(self, Object::GeneratorField { .. })
+        match self {
+            Object::GeneratorField { family, .. } => crate::procedural::family::is_known(*family),
+            _ => true,
+        }
     }
 }
 

@@ -43,9 +43,21 @@ pub struct Kernels {
     pub fill_row: fn(&mut [u8], &[u8]),
 }
 
+/// Per-object content classification inside the engine: an object is either
+/// drawn from stored rows (opaque raster) or is an opaque constant generator
+/// field, which draws as an ordered fill of one request-format code.
+/// Anything else makes the document ineligible.
+#[derive(Clone, Copy)]
+enum ObjUse {
+    Rows,
+    /// Request-format code bytes of the constant color (length 4; the
+    /// engine uses `bytes_per_sample` of the request).
+    ConstFill([u8; 4]),
+}
+
 /// Is the geometry of this instance eligible: integer-pixel translation,
-/// identity linear part, and a plain raster object (format/opacity checked
-/// separately against the per-object cache)?
+/// identity linear part, and a plain raster or generator-field object
+/// (content/opacity checked separately against the per-object cache)?
 fn geometry_eligible(inst: &PlacedInstance<'_>) -> bool {
     let tr = inst.tr;
     if tr.x & 0xFFFF != 0 || tr.y & 0xFFFF != 0 {
@@ -54,7 +66,10 @@ fn geometry_eligible(inst: &PlacedInstance<'_>) -> bool {
     if inst.a != 1 << 16 || inst.d != 1 << 16 || inst.b != 0 || inst.c != 0 {
         return false;
     }
-    matches!(inst.object(), crate::ir::Object::Raster { .. })
+    matches!(
+        inst.object(),
+        crate::ir::Object::Raster { .. } | crate::ir::Object::GeneratorField { .. }
+    )
 }
 
 /// Compute opaque-row source offset for gray vs rgba objects.
@@ -85,6 +100,7 @@ fn object_row<'o>(inst: &'o PlacedInstance<'_>, oy: i32) -> Option<&'o [u8]> {
 fn object_h(inst: &PlacedInstance<'_>) -> i32 {
     match inst.object() {
         crate::ir::Object::Raster { h, .. } => *h as i32,
+        crate::ir::Object::GeneratorField { h, .. } => *h as i32,
         _ => 0,
     }
 }
@@ -92,6 +108,7 @@ fn object_h(inst: &PlacedInstance<'_>) -> i32 {
 fn object_w(inst: &PlacedInstance<'_>) -> i32 {
     match inst.object() {
         crate::ir::Object::Raster { w, .. } => *w as i32,
+        crate::ir::Object::GeneratorField { w, .. } => *w as i32,
         _ => 0,
     }
 }
@@ -147,37 +164,55 @@ pub(crate) fn simple_impl(
         }
     }
 
-    // per-object opacity + format cache; all instances must pass
-    let mut object_ok: Vec<Option<bool>> = vec![None; scene.doc().objects.len()];
+    // per-object content cache; every instance must pass
+    let mut object_use: Vec<Option<ObjUse>> = vec![None; scene.doc().objects.len()];
+    let classify = |o: usize, fmt: ColorFormat| -> Option<ObjUse> {
+        match &scene.doc().objects[o] {
+            crate::ir::Object::Raster { format, data, .. } => {
+                let fmt_ok = if target_gray {
+                    *format == ColorFormat::Gray8
+                } else {
+                    *format == ColorFormat::Rgba8
+                };
+                let opaque = if *format == ColorFormat::Rgba8 {
+                    data.as_chunks::<4>().0.iter().all(|px| px[3] == 255)
+                } else {
+                    true
+                };
+                (fmt_ok && opaque).then_some(ObjUse::Rows)
+            }
+            crate::ir::Object::GeneratorField {
+                family: f,
+                w: _,
+                h: _,
+                params,
+            } if *f == crate::procedural::family::CONSTANT => {
+                // An opaque constant field draws exactly like a fill of one
+                // color; the request-format code is produced by the same
+                // conversion the oracle applies to a composed sample.  Other
+                // families stay ineligible for the fast path in Phase H
+                // (recorded; they run on the blocked/scalar path).
+                let field = crate::procedural::decode_field(*f, params, 0, 0).ok()?;
+                match field {
+                    crate::procedural::Field::Constant(p) if p.color.a == 255 => {
+                        let (code, _) = crate::materialize::scalar::encode_code_pub(p.color, fmt);
+                        Some(ObjUse::ConstFill(code))
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    };
     for inst in &scene.instances {
         if !geometry_eligible(inst) {
             return Ok(None);
         }
         let o = inst.object as usize;
-        let ok = match object_ok[o] {
-            Some(v) => v,
-            None => {
-                let v = match &scene.doc().objects[o] {
-                    crate::ir::Object::Raster { format, data, .. } => {
-                        let fmt_ok = if target_gray {
-                            *format == ColorFormat::Gray8
-                        } else {
-                            *format == ColorFormat::Rgba8
-                        };
-                        let opaque = if *format == ColorFormat::Rgba8 {
-                            data.as_chunks::<4>().0.iter().all(|px| px[3] == 255)
-                        } else {
-                            true
-                        };
-                        fmt_ok && opaque
-                    }
-                    _ => false,
-                };
-                object_ok[o] = Some(v);
-                v
-            }
-        };
-        if !ok {
+        if object_use[o].is_none() {
+            object_use[o] = classify(o, req.format);
+        }
+        if object_use[o].is_none() {
             return Ok(None);
         }
     }
@@ -198,10 +233,16 @@ pub(crate) fn simple_impl(
         let iy1 = (oy0 + object_h(inst)).min(oy + h as i32);
         // clip rect in scene px (conservative integer bounds)
         let cpx = inst.clip.map(|c| c.px_bounds());
+        // constant generator instances draw as ordered row fills; raster
+        // instances draw as row copies.
+        let fill_code: Option<[u8; 4]> = match object_use[inst.object as usize] {
+            Some(ObjUse::ConstFill(code)) => Some(code),
+            _ => None,
+        };
         let mut drawn_rows = 0u64;
         for y in iy0..iy1 {
             let oy_local = y - oy0;
-            let row = object_row(inst, oy_local).expect("eligible object");
+            let row = object_row(inst, oy_local);
             let mut sx = ox0;
             let mut ex = ox0 + object_w(inst);
             if let Some(cp) = cpx {
@@ -214,9 +255,17 @@ pub(crate) fn simple_impl(
                 continue;
             }
             let d = ((y - oy) as usize) * (w as usize) * bps + ((sx - ox) as usize) * bps;
-            let s = ((sx - ox0) as usize) * bps;
             let n = ((ex - sx) as usize) * bps;
-            (k.copy_row)(&mut out.data[d..d + n], &row[s..s + n]);
+            match fill_code {
+                Some(code) => {
+                    (k.fill_row)(&mut out.data[d..d + n], &code[..bps]);
+                }
+                None => {
+                    let row = row.expect("eligible raster object");
+                    let s = ((sx - ox0) as usize) * bps;
+                    (k.copy_row)(&mut out.data[d..d + n], &row[s..s + n]);
+                }
+            }
             drawn_rows += 1;
         }
         if drawn_rows > 0 {

@@ -128,6 +128,11 @@ pub struct Scene<'a> {
     patched_cache: HashMap<u32, Vec<Rgba>>,
     /// Ordered structural operations.
     pub ops: Vec<StructOp<'a>>,
+    /// Decoded generator fields, one slot per document object (None for
+    /// non-generator objects).  Parsed once per resolve so per-sample
+    /// evaluation never re-decodes; resolution fails closed on malformed
+    /// params (deterministic `Reject`).
+    fields: Vec<Option<crate::procedural::Field>>,
 }
 
 impl<'a> Scene<'a> {
@@ -160,6 +165,25 @@ impl<'a> Scene<'a> {
             });
         }
         instances.sort_by_key(|x| (x.layer, x.order));
+
+        // Decode generator fields up front: fail closed on malformed params.
+        let mut fields: Vec<Option<crate::procedural::Field>> =
+            Vec::with_capacity(doc.objects.len());
+        for o in &doc.objects {
+            match o {
+                crate::ir::Object::GeneratorField {
+                    family,
+                    w,
+                    h,
+                    params,
+                } => {
+                    let f = crate::procedural::decode_field(*family, params, *w, *h)
+                        .map_err(|_| Reject::UnsupportedProfile)?;
+                    fields.push(Some(f));
+                }
+                _ => fields.push(None),
+            }
+        }
 
         let mut patches: Vec<(u32, u32, &'a [Rgba])> = Vec::new();
         let mut ops: Vec<StructOp<'a>> = Vec::new();
@@ -230,7 +254,74 @@ impl<'a> Scene<'a> {
             patches,
             patched_cache: patched,
             ops,
+            fields,
         })
+    }
+
+    /// Sample a document content object (raster / indexed raster) at its own
+    /// local integer pixel `(u, v)`, honoring palette patches at this time.
+    /// Returns `None` for out-of-bounds or non-content objects.  Used by the
+    /// shared instance sampler and by generator families that reference
+    /// objects (affine reuse / object families).
+    pub fn sample_content(&self, object: u32, u: i32, v: i32) -> Option<Rgba> {
+        use crate::color::ColorFormat;
+        let obj = self.doc.objects.get(object as usize)?;
+        match obj {
+            crate::ir::Object::Raster {
+                format: ColorFormat::Rgba8,
+                w,
+                h,
+                data,
+            } => {
+                let (i, j) = in_bounds_local(u, v, *w, *h)?;
+                let o = ((j * w) + i) as usize * 4;
+                Some(Rgba::from_bytes([
+                    data[o],
+                    data[o + 1],
+                    data[o + 2],
+                    data[o + 3],
+                ]))
+            }
+            crate::ir::Object::Raster {
+                format: ColorFormat::Gray8,
+                w,
+                h,
+                data,
+            } => {
+                let (i, j) = in_bounds_local(u, v, *w, *h)?;
+                Some(Rgba::gray(data[(j * w + i) as usize]))
+            }
+            crate::ir::Object::IndexedRaster { pal, w, h, indices } => {
+                let (i, j) = in_bounds_local(u, v, *w, *h)?;
+                let idx = indices[(j * w + i) as usize];
+                self.palette(*pal)?.get(idx)
+            }
+            _ => None,
+        }
+    }
+
+    /// Evaluate a generator field object at its local integer pixel `(i, j)`.
+    /// `object` must be a validated generator object and `(i, j)` in bounds
+    /// (the raster-like bounds check happens at the caller).
+    pub fn sample_field(&self, object: u32, i: u32, j: u32) -> Option<Rgba> {
+        let field = self.fields.get(object as usize)?.as_ref()?;
+        let obj = self.doc.objects.get(object as usize)?;
+        let (w, h) = match obj {
+            crate::ir::Object::GeneratorField { w, h, .. } => (*w, *h),
+            _ => return None,
+        };
+        if i >= w || j >= h {
+            return None;
+        }
+        let refs = crate::procedural::Refs {
+            sample_object: &|o, u, v| self.sample_content(o, u, v),
+        };
+        Some(field.sample(w, h, i, j, &refs))
+    }
+
+    /// Decoded generator field of `object` (None for non-generators).
+    pub fn field_of(&self, object: u32) -> Option<&crate::procedural::Field> {
+        self.fields.get(object as usize)?.as_ref()
     }
 
     /// Effective palette contents for a palette object id at this time.
@@ -274,9 +365,9 @@ pub fn placed_bounds_px(
 ) -> Option<IRect> {
     let obj = doc.objects.get(object as usize)?;
     let (w, h) = match obj {
-        crate::ir::Object::Raster { w, h, .. } | crate::ir::Object::IndexedRaster { w, h, .. } => {
-            (*w, *h)
-        }
+        crate::ir::Object::Raster { w, h, .. }
+        | crate::ir::Object::IndexedRaster { w, h, .. }
+        | crate::ir::Object::GeneratorField { w, h, .. } => (*w, *h),
         _ => return None,
     };
     let aff = crate::fixed::Affine {
@@ -289,6 +380,15 @@ pub fn placed_bounds_px(
     };
     let local = crate::fixed::RectF::from_px(0, 0, w as i32, h as i32);
     Some(aff.bounds_of(local).px_bounds())
+}
+
+/// Integer bounds check helper for local content sampling.
+fn in_bounds_local(u: i32, v: i32, w: u32, h: u32) -> Option<(u32, u32)> {
+    if u >= 0 && v >= 0 && u < w as i32 && v < h as i32 {
+        Some((u as u32, v as u32))
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]

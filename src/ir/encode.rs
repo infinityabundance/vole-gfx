@@ -62,8 +62,15 @@ fn encode_body(w: &mut Vec<u8>, doc: &Document) {
                     put_u32(&mut payload, *ix);
                 }
             }
-            Object::GeneratorField { family, params } => {
+            Object::GeneratorField {
+                family,
+                w: ow,
+                h: oh,
+                params,
+            } => {
                 put_u8(&mut payload, *family);
+                put_u32(&mut payload, *ow);
+                put_u32(&mut payload, *oh);
                 put_u32(&mut payload, params.len() as u32);
                 put_bytes(&mut payload, params);
             }

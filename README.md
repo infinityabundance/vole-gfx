@@ -53,11 +53,14 @@ machine-readable version. In short, implemented, tested and receipted:
   backends that reproduce the oracle byte-for-byte (canonical SHA-256);
 - Phase G: Rust device code compiled to PTX (`nvptx64-nvidia-cuda`) and
   loaded through a minimal libcuda binding, byte-parity on real NVIDIA
-  hardware — no CUDA C++.
+  hardware — no CUDA C++;
+- Phase H: seeded procedural generator objects — ten bounded families
+  (`Γ(U, s, θ)`) with canonical params, cost estimators and exact
+  deterministic evaluation; materialization evaluates only requested
+  samples (direct seeded evaluation, no re-baking).
 
-Pending: procedural generator objects (H), the inverse procedural compiler
-(I–N), the public corpus (O), the runtime courts (P–R), and the remaining
-hardware-dependent phases (S–X).
+Pending: the inverse procedural compiler (I–N), the public corpus (O), the
+runtime courts (P–R), and the remaining hardware-dependent phases (S–X).
 
 ## Quick start
 

@@ -38,6 +38,16 @@ engine so courts can decompose the speedup:
 Documents outside the subset return `None` and fall back to blocked/scalar;
 receipts record which path ran.
 
+## Generator fields (Phase H)
+
+Generator objects (`Object::GeneratorField`) sample through the same shared
+per-sample rule (`sample_placed`): inverse-affine to the local lattice pixel,
+bounds-check against the field extent, then evaluate the family at that
+point only — no whole-object raster is produced for any request shape
+(direct seeded evaluation).  Opaque constant fields are eligible for the
+fill-based simple path; all other families run the exact scalar/blocked path
+in Phase H (recorded decision, see docs/IMPLEMENTATION_STATE.md).
+
 ## Work accounting
 
 Every materialization returns `Counters` (samples, instance tests/draws,

@@ -118,12 +118,26 @@ fn decode_body(r: &mut Reader<'_>) -> Result<Document, Reject> {
             }
             kind::GENERATOR_FIELD => {
                 let family = pr.u8()?;
+                let w = pr.u32()?;
+                let h = pr.u32()?;
+                if w as u64 > limits.max_dimension as u64 || h as u64 > limits.max_dimension as u64
+                {
+                    return Err(Reject::DimensionTooLarge);
+                }
                 let plen = pr.u32()? as usize;
+                if plen as u64 > limits.max_generator_params {
+                    return Err(Reject::BytesExceedsLimit);
+                }
                 if pr.remaining() != plen {
                     return Err(Reject::PayloadMismatch);
                 }
                 let params = pr.bytes(plen)?.to_vec();
-                Object::GeneratorField { family, params }
+                Object::GeneratorField {
+                    family,
+                    w,
+                    h,
+                    params,
+                }
             }
             _ => return Err(Reject::UnknownTag),
         };

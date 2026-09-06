@@ -75,6 +75,24 @@ these rules; nothing platform-dependent is allowed.
 - The persisted representation is cadence-independent: any time coordinate
   may be requested.
 
+## Generators (Phase H)
+
+- A generator field object (`kind::GENERATOR_FIELD`) declares an extent
+  `w×h` and a versioned family + canonical params blob; the seed `s` (where
+  the family has one) and parameters `θ` together *are* the generator state.
+- **Addressing** is raster-like and exact: the placement's inverse affine
+  selects a local lattice pixel `(i,j)`, bounds-checked against the extent;
+  the field value is a pure function of `(i,j)` (see
+  `docs/EXACT_SEMANTICS.md` §Generators for the per-family tables, including
+  the canonical param wire layouts and cost estimators).
+- **Evaluation is direct and lazy**: only requested samples are evaluated and
+  no whole-object raster is produced, so a partial observation of a large
+  field costs partial work (measured in the phase-h receipts).
+- Families are bounded and non-Turing-complete; every sample's work estimate
+  is < `MAX_GENERATOR_WORK_PER_SAMPLE`.  Referenced-object families
+  (affine-reuse, object-family) may reference raster/indexed objects only
+  (no recursion), validated against the object table.
+
 ## Limits & failure
 
 All caps in `limits.rs` (object counts/bytes, dimensions ≤ 16384 px per axis

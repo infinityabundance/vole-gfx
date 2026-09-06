@@ -62,6 +62,15 @@
       "receipts": [
         "phase-g-ptx-cuda-parity-9a37500cbfd78360.json"
       ]
+    },
+    {
+      "id": "vole-gfx.phase-h.procedural-fields",
+      "status": "demonstrated",
+      "statement": "Ten bounded generator families (constant, gradient, palette-field, periodic, tiled, affine-reuse, deterministic-field, fractal, sdf, object-family) are normative U1 state with canonical versioned param wire encodings, semantic validation, bounded work-unit cost estimators, and exact deterministic evaluation; on the 1920x1080 ten-family court every request shape evaluated exactly its requested samples (full 2,073,600 / region-1pct 20,736 / tile 4,096 / scanline 1,920 / band 61,440 / irregular 5), so partial observations never re-bake whole objects (direct seeded evaluation), and scalar/blocked/rayon outputs are byte-identical; the pure-constant subset dispatches to the avx2 fill path (~113us) byte-identically, while other families run the exact scalar/blocked path in this phase. Pinned conformance hashes cover the mixed scene in RGBA and Gray8 at two observation times.",
+      "domain": "vole.gfx.u1 exact profile, CPU, this host+commit; see receipt phase-h-*",
+      "receipts": [
+        "phase-h-procedural-fields-2d2bdd1e5b76f714.json"
+      ]
     }
   ]
 }

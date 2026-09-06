@@ -15,8 +15,8 @@
 //! * Bounded execution (depth + frame budgets) matches the oracle's guards.
 
 use super::blocks::{BlockShape, tile_domain};
-use super::scalar::{Counters, Materialized};
-use crate::color::{ColorFormat, Rgba, over};
+use super::scalar::{Counters, Materialized, sample_placed};
+use crate::color::{Rgba, over};
 use crate::fixed::Vec2;
 use crate::limits::Reject;
 use crate::observation::{ObservationRequest, Output};
@@ -391,63 +391,6 @@ impl<'a> BlockMaterializer<'a> {
         }
         self.memo.insert(key, cur);
         Ok(cur)
-    }
-}
-
-/// Sample one placed instance at a scene point (identical rule to the scalar
-/// oracle; free function so callers can avoid whole-`self` borrows).
-fn sample_placed(
-    scene: &Scene<'_>,
-    inst: &crate::state::PlacedInstance<'_>,
-    cx: Vec2,
-) -> Option<Rgba> {
-    if let Some(clip) = inst.clip
-        && !((cx.x as i64) >= (clip.x0 as i64)
-            && (cx.x as i64) < (clip.x1 as i64)
-            && (cx.y as i64) >= (clip.y0 as i64)
-            && (cx.y as i64) < (clip.y1 as i64))
-    {
-        return None;
-    }
-    let aff = inst.affine();
-    let (lx, ly) = super::scalar::inv_sample_pub(&aff, cx)?;
-    let obj = inst.object();
-    match obj {
-        crate::ir::Object::Raster {
-            format: ColorFormat::Rgba8,
-            w,
-            h,
-            data,
-        } => {
-            let (i, j) = super::scalar::in_bounds_pub(lx, ly, *w, *h)?;
-            let o = (j * w + i) as usize * 4;
-            Some(Rgba::from_bytes([
-                data[o],
-                data[o + 1],
-                data[o + 2],
-                data[o + 3],
-            ]))
-        }
-        crate::ir::Object::Raster {
-            format: ColorFormat::Gray8,
-            w,
-            h,
-            data,
-        } => {
-            let (i, j) = super::scalar::in_bounds_pub(lx, ly, *w, *h)?;
-            let g = data[(j * w + i) as usize];
-            Some(Rgba::gray(g))
-        }
-        crate::ir::Object::IndexedRaster { w, h, indices, .. } => {
-            let (i, j) = super::scalar::in_bounds_pub(lx, ly, *w, *h)?;
-            let idx = indices[(j * w + i) as usize];
-            let pal_id = inst.palette.unwrap_or_else(|| match obj {
-                crate::ir::Object::IndexedRaster { pal, .. } => *pal,
-                _ => unreachable!(),
-            });
-            scene.palette(pal_id)?.get(idx)
-        }
-        _ => None,
     }
 }
 

@@ -25,7 +25,14 @@ canonical byte strings, `encode(decode(b)) == b`.
    - Raster: format `u8`, w `u32`, h `u32`, row-major `w·h·stride` bytes.
    - Palette: count `u32`, RGBA8 `[r,g,b,a]` per entry.
    - IndexedRaster: palette object id `u32`, w, h, `w·h` index `u32`s.
-   - GeneratorField: family `u8`, param blob (semantics in Phase H).
+   - GeneratorField (Phase H): family `u8`, extent w `u32`, h `u32`, params
+     len `u32`, params blob.  Family tags: 1 constant, 2 gradient, 3
+     palette-field, 4 periodic, 5 tiled, 6 affine-reuse, 7
+     deterministic-field, 8 fractal, 9 sdf, 10 object-family.  The params
+     blob is a **versioned canonical payload per family** (see
+     `docs/EXACT_SEMANTICS.md` §Generators for the field-by-field tables;
+     the IR layer treats it as opaque and bounds it at `max_generator_params`
+     before allocation).
    - Object identity = section index (content-addressing by SHA-256 of the
      canonical encoding is external to the container).
 2. **Trajectories** — count; each: kind `u8` (1 = linear translation), key
