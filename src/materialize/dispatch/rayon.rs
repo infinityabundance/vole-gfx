@@ -133,15 +133,18 @@ pub fn materialize_bands_with(
                 BandSimd::Auto => {
                     #[cfg(target_arch = "x86_64")]
                     {
-                        if super::avx512::has_avx512() {
-                            if let Some(m) = super::avx512::materialize_simple(scene, &sub, shape)?
-                            {
+                        // Evidence-ordered Auto (see dispatch::materialize_auto):
+                        // AVX2 is measured faster than AVX-512 on this host's
+                        // byte-exact court (phase-e receipt), so try it first.
+                        if super::avx2::has_avx2() {
+                            if let Some(m) = super::avx2::materialize_simple(scene, &sub, shape)? {
                                 m
                             } else {
                                 bm.materialize(&sub, shape)?
                             }
-                        } else if super::avx2::has_avx2() {
-                            if let Some(m) = super::avx2::materialize_simple(scene, &sub, shape)? {
+                        } else if super::avx512::has_avx512() {
+                            if let Some(m) = super::avx512::materialize_simple(scene, &sub, shape)?
+                            {
                                 m
                             } else {
                                 bm.materialize(&sub, shape)?

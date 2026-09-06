@@ -37,7 +37,13 @@ impl Path {
     }
 }
 
-/// Auto dispatch: AVX-512 simple path → AVX2 simple path → blocked/scalar.
+/// Auto dispatch: AVX2 simple path → AVX-512 simple path → blocked/scalar.
+///
+/// Order follows the *measured* execution economics, not ISA width: the
+/// phase-e receipt (cpu-backend-matrix, this host/court) recorded AVX-512 at
+/// ~144 µs vs AVX2 at ~130 µs for the same byte-exact workload, so AVX-512 is
+/// only consulted when AVX2 is unavailable or ineligible.  The chosen path is
+/// always recorded so courts can re-derive the policy from receipts.
 pub fn materialize_auto(
     scene: &Scene<'_>,
     req: &ObservationRequest,
@@ -45,15 +51,15 @@ pub fn materialize_auto(
 ) -> Result<(Materialized, Path), Reject> {
     #[cfg(target_arch = "x86_64")]
     {
-        if avx512::has_avx512()
-            && let Some(m) = avx512::materialize_simple(scene, req, shape)?
-        {
-            return Ok((m, Path::Avx512));
-        }
         if avx2::has_avx2()
             && let Some(m) = avx2::materialize_simple(scene, req, shape)?
         {
             return Ok((m, Path::Avx2));
+        }
+        if avx512::has_avx512()
+            && let Some(m) = avx512::materialize_simple(scene, req, shape)?
+        {
+            return Ok((m, Path::Avx512));
         }
     }
     let mut bm =
