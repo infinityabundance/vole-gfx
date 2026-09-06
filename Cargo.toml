@@ -11,10 +11,11 @@ categories = ["graphics", "multimedia::encoding", "science"]
 
 # ---------------------------------------------------------------------------
 # Dependency policy (one crate):
-#  - host CUDA driver binding and Vulkan are OPTIONAL features so that plain
-#    CPU builds need no external graphics SDKs.
+#  - host CUDA driver binding (libloading -> libcuda) and Vulkan are OPTIONAL
+#    features so that plain CPU builds need no external graphics SDKs.
 #  - cudarc / ash are only added via `cargo add` when the corresponding phase
-#    actually lands; features exist now so module cfg-gates are stable.
+#    actually lands and measurement justifies them; features exist now so
+#    module cfg-gates are stable.
 # ---------------------------------------------------------------------------
 
 [dependencies]
@@ -30,7 +31,8 @@ criterion = "0.5"
 
 [features]
 default = []
-# Host-side CUDA driver interaction (cudarc). Device code itself is Rust PTX.
+# Host-side CUDA driver interaction via a narrow libloading binding to
+# libcuda (the driver API). Device code itself is Rust PTX (cuda-device).
 cuda = ["dep:libloading"]
 # Compile the crate (or --lib with --no-default-features) as no_std device code
 # for the nvptx64-nvidia-cuda target.

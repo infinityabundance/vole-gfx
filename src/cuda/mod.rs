@@ -2,8 +2,9 @@
 //!
 //! * Device code is written in Rust and compiled to PTX with the
 //!   `nvptx64-nvidia-cuda` target from **this same crate** (`kernels`).
-//! * Host interaction is feature-gated (`cuda` feature + `cudarc`); the host
-//!   module is compiled only when the feature is enabled.
+//! * Host interaction is feature-gated (`cuda` feature): a narrow `libloading`
+//!   binding to `libcuda` (the driver API) in `host`; the host module is
+//!   compiled only when the feature is enabled.
 //! * Receipts record rustc/LLVM/PTX/SM/driver versions; CUDA equality is only
 //!   claimed on hosts with a genuine NVIDIA device (never mocked).
 

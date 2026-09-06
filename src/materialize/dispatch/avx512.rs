@@ -8,8 +8,8 @@
 
 use crate::limits::Reject;
 use crate::materialize::blocks::BlockShape;
-use crate::materialize::dispatch::avx2::{self, Kernels};
 use crate::materialize::scalar::Materialized;
+use crate::materialize::simple::{Kernels, simple_impl};
 use crate::observation::ObservationRequest;
 use crate::state::Scene;
 
@@ -110,7 +110,7 @@ pub fn materialize_simple(
             copy_row: copy_row_avx512,
             fill_row: fill_row_avx512,
         };
-        avx2::simple_impl(scene, req, shape, &k)
+        simple_impl(scene, req, shape, &k)
     } else {
         Ok(None)
     }

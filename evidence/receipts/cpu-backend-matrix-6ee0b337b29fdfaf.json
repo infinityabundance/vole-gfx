@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "run_id": "cpu-backend-matrix-6ee0b337b29fdfaf",
+  "timestamp_unix_ms": 1788735732440,
+  "git_commit": "e52c2e2576a10dce174691d94137868cd9574395",
+  "git_dirty": true,
+  "command": "target/release/examples/cpu_matrix_gate d",
+  "court": "cpu-backend-matrix",
+  "universe": "vole.gfx.u1",
+  "profile": "exact-u1",
+  "backend": "avx2+matrix",
+  "exact": true,
+  "inputs": {
+    "phase": "d"
+  },
+  "outputs": {
+    "canonical_hash": "162c5cb9532126d31bd1a555e5cb14387955d2459da900694286c6cfc059390a",
+    "surface": "1920x1080 rgba8 200 sprites"
+  },
+  "canonical_hash": "162c5cb9532126d31bd1a555e5cb14387955d2459da900694286c6cfc059390a",
+  "reference_hash": "162c5cb9532126d31bd1a555e5cb14387955d2459da900694286c6cfc059390a",
+  "metrics": {
+    "avx2_ns": 134069,
+    "blocked_ns": 13644442,
+    "oracle_scalar_ns": 216092807,
+    "scalar_ns": 213758648,
+    "scalar_simple_ns": 2964182
+  },
+  "quality_metric": null,
+  "quality_value": null,
+  "persistent_bytes": 18717,
+  "residual_bytes": 0,
+  "samples_requested": 2073600,
+  "samples_evaluated": 0,
+  "pass": true,
+  "unsupported_reason": null,
+  "notes": [
+    "all measured backends byte-identical to scalar oracle; decomposition rows: scalar oracle / scalar blocked / scalar-simple / SIMD simple; host dispatch: avx2=true avx512=true",
+    "ablation: algorithmic-specialization ratio scalar/scalar-simple = 72.9x; SIMD ratio scalar-simple/avx2 = 22.1x (from the *_ns metrics)"
+  ],
+  "environment": {
+    "cpu": {
+      "vendor_model": ": AMD Ryzen 7 9800X3D 8-Core Processor",
+      "cores": 16,
+      "avx2": true,
+      "avx512_subfeatures": [
+        "avx512f",
+        "avx512dq",
+        "avx512ifma",
+        "avx512cd",
+        "avx512bw",
+        "avx512vl",
+        "avx512_bf16",
+        "avx512vbmi",
+        "avx512_vbmi2",
+        "avx512_vnni",
+        "avx512_bitalg",
+        "avx512_vpopcntdq",
+        "avx512_vp2intersect"
+      ]
+    },
+    "gpu": {
+      "present": true,
+      "name": "NVIDIA GeForce RTX 4080 SUPER",
+      "driver": "610.57.04",
+      "cuda_umd": "NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  610.57.04  Release Build  (root@vanir)"
+    },
+    "compiler": {
+      "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8",
+      "rustc_version": "1.98.0",
+      "llvm": "22.1.8",
+      "profile": null,
+      "target_cpu": null
+    },
+    "system": {
+      "os": "linux",
+      "kernel": "7.2.2-1-cachyos"
+    },
+    "git_commit": "e52c2e2576a10dce174691d94137868cd9574395",
+    "git_dirty": true
+  },
+  "receipt_hash": "3dcff2bfb1af65ceca367f50f666a9d1c99a99fe90d9861aac67a0a16c1a09fa"
+}

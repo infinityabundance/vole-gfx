@@ -169,6 +169,35 @@ fn main() {
     eprintln!("{:>16}: {blocked_ns:>12} ns", "blocked");
     r.metrics.insert("blocked_ns".into(), blocked_ns);
 
+    // scalar-simple ablation row: the exact simple-composition engine
+    // (opaque integer-translation subset) with plain scalar kernels.  This
+    // decomposes the big scalar->AVX2 number into algorithmic
+    // specialization (scalar -> scalar-simple -> blocked chain) x SIMD gain
+    // (scalar-simple -> avx2/avx512), instead of presenting 211ms -> 130us
+    // as a single SIMD effect.
+    if phase == "d" || phase == "e" || phase == "f" {
+        match vole_gfx::materialize::simple::materialize_simple_scalar(&scene, &req, shape).unwrap()
+        {
+            Some(m) => {
+                assert_eq!(
+                    m.output.canonical_hash().to_hex(),
+                    oh,
+                    "scalar-simple parity"
+                );
+                let ns = time_ms(|| {
+                    let _ = vole_gfx::materialize::simple::materialize_simple_scalar(
+                        &scene, &req, shape,
+                    )
+                    .unwrap()
+                    .unwrap();
+                });
+                eprintln!("{:>16}: {ns:>12} ns", "scalar-simple");
+                r.metrics.insert("scalar_simple_ns".into(), ns);
+            }
+            None => panic!("court must be scalar-simple eligible"),
+        }
+    }
+
     if phase == "d" || phase == "e" || phase == "f" {
         if avx2::has_avx2() {
             run_bench(&mut r, &oh, "avx2", &mut || match avx2::materialize_simple(
@@ -221,10 +250,17 @@ fn main() {
     r.metrics.insert("oracle_scalar_ns".into(), oracle_ns);
     r.pass = true;
     r.notes.push(format!(
-        "all measured backends byte-identical to scalar oracle; host dispatch: avx2={} avx512={}",
+        "all measured backends byte-identical to scalar oracle; decomposition rows: scalar oracle / scalar blocked / scalar-simple / SIMD simple; host dispatch: avx2={} avx512={}",
         avx2::has_avx2(),
         avx512::has_avx512()
     ));
+    if let Some(v) = r.metrics.get("scalar_simple_ns") {
+        r.notes.push(format!(
+            "ablation: algorithmic-specialization ratio scalar/scalar-simple = {:.1}x; SIMD ratio scalar-simple/avx2 = {:.1}x (from the *_ns metrics)",
+            oracle_ns as f64 / *v as f64,
+            *v as f64 / r.metrics.get("avx2_ns").copied().unwrap_or(*v) as f64
+        ));
+    }
     let path = emit_receipt(r).expect("emit");
     println!("PHASE {phase} PASS; receipt {path}; oracle {oracle_ns} ns");
 }

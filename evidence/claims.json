@@ -30,28 +30,28 @@
     {
       "id": "vole-gfx.phase-d.avx2",
       "status": "demonstrated",
-      "statement": "AVX2 simple path (exact opaque integer-translation row blits + opaque fills + residual closure) is byte-identical to the scalar oracle; on the 1920x1080 200-sprite court this host (Zen5, AVX2) measured median materialization ~130us vs ~211ms scalar and ~13.7ms blocked.",
+      "statement": "AVX2 simple path (exact opaque integer-translation row blits + opaque fills + residual closure) is byte-identical to the scalar oracle; on the 1920x1080 200-sprite court this host (Zen5, AVX2) measured median materialization ~131us vs ~213.8ms scalar oracle, ~13.6ms scalar blocked and ~2.9ms scalar-simple. The ablation rows decompose the speedup: ~73x algorithmic specialization of the eligible subset (scalar oracle -> scalar-simple, same engine as the SIMD paths) and ~22x SIMD gain (scalar-simple -> avx2); the large scalar->AVX2 ratio is NOT presented as SIMD alone.",
       "domain": "vole.gfx.u1 exact profile, eligible subset, this host+commit; see receipt cpu-backend-matrix (phase d)",
       "receipts": [
-        "cpu-backend-matrix-04dc35fc2d5245e6.json"
+        "cpu-backend-matrix-6ee0b337b29fdfaf.json"
       ]
     },
     {
       "id": "vole-gfx.phase-e.avx512",
       "status": "demonstrated",
-      "statement": "AVX-512 simple path reproduces the same bytes; on this court it measured ~144us vs ~130us AVX2 \u2014 AVX-512 loses on this memory-bound workload (retained as negative evidence; no assumed 512>256 win).",
+      "statement": "AVX-512 simple path reproduces the same bytes; on this court it measured ~147us vs ~131us AVX2 \u2014 AVX-512 loses on this memory-bound workload (retained as negative evidence; no assumed 512>256 win; auto dispatch prefers AVX2 on the same evidence).",
       "domain": "vole.gfx.u1 exact profile, eligible subset, this host+commit; see receipt cpu-backend-matrix (phase e)",
       "receipts": [
-        "cpu-backend-matrix-b62343ef29920926.json"
+        "cpu-backend-matrix-43f2738a11eb9493.json"
       ]
     },
     {
       "id": "vole-gfx.phase-f.rayon",
       "status": "demonstrated",
-      "statement": "Rayon band-parallel materialization is byte-identical to the oracle and deterministic across band heights and thread counts; on this court rayon-avx2 ~268us, rayon-avx512 ~284us, rayon-scalar ~2.7ms (band height 64, block 16x16).",
+      "statement": "Rayon band-parallel materialization is byte-identical to the oracle and deterministic across band heights and thread counts; on this court rayon-avx2 ~284us, rayon-avx512 ~263us, rayon-scalar ~2.3ms, rayon-auto ~316us (band height 64, block 16x16); auto dispatch recorded the avx2 path.",
       "domain": "vole.gfx.u1 exact profile, this host+commit; see receipt cpu-backend-matrix (phase f)",
       "receipts": [
-        "cpu-backend-matrix-f78c2b793577e3d2.json"
+        "cpu-backend-matrix-34e60000c6f5fb5e.json"
       ]
     },
     {

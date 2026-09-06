@@ -18,6 +18,26 @@ The optimization unit is deliberately neither "pixel" nor "frame":
 and a canonical deterministic tiling of any request rectangle. Block shape is
 a backend decision swept by courts; it is never part of the IR.
 
+## Specialized simple-composition engine
+
+`materialize::simple` implements an algorithmic specialization of the same
+semantics for the *eligible subset*: fully-opaque rasters placed at integer
+pixel translations (identity linear part), opaque fills, and residual
+bindings.  In that subset composition is ordered memory writes, so the engine
+injects byte-moving row kernels (`copy_row`, `fill_row`) and is provably
+byte-identical to the oracle for any kernel set.  Four measured rows share the
+engine so courts can decompose the speedup:
+
+- `scalar` (oracle): general per-sample composition;
+- `blocked`: oracle-equivalent, block + dependency indexed;
+- `scalar-simple`: the engine with scalar kernels (algorithmic
+  specialization, no SIMD);
+- `avx2` / `avx512`: the engine with SIMD kernels (SIMD gain measured against
+  scalar-simple).
+
+Documents outside the subset return `None` and fall back to blocked/scalar;
+receipts record which path ran.
+
 ## Work accounting
 
 Every materialization returns `Counters` (samples, instance tests/draws,

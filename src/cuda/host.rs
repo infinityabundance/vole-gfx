@@ -5,6 +5,19 @@
 //! Phase G parity courts to load the Rust-generated PTX, launch the Rust
 //! kernels, and compare device output byte-for-byte with the CPU backends.
 //!
+//! Context ownership: a `Module` owns one driver context, but a CUDA context
+//! is only *current* on the thread that called `cuCtxSetCurrent` for it.
+//! Every device-touching method therefore routes through `Module::with_ctx`,
+//! which makes the module's context current on the calling thread for the
+//! duration of the call and restores the thread's previous current context on
+//! the way out (`ContextGuard`).  No thread is ever left with the module's
+//! context current after a call returns, and the module never relies on the
+//! creating thread's TLS state — so sharing `&Module` across threads is
+//! sound, and `Send`/`Sync` are justified *only* by that per-call binding
+//! (see the SAFETY notes on the impls).  The one hard contract: `Drop` must
+//! not race with an in-flight guarded call on another thread (standard
+//! use-after-drop ownership rule).
+//!
 //! Every unsafe block has a SAFETY note; pointers are validated before use.
 
 #![allow(clippy::missing_safety_doc)]
@@ -23,6 +36,9 @@ struct Driver {
     device_get: unsafe extern "C" fn(*mut i32, i32) -> CudaResult,
     ctx_create: unsafe extern "C" fn(*mut *mut c_void, u32, i32) -> CudaResult,
     ctx_destroy: unsafe extern "C" fn(*mut c_void) -> CudaResult,
+    ctx_get_current: unsafe extern "C" fn(*mut *mut c_void) -> CudaResult,
+    ctx_set_current: unsafe extern "C" fn(*mut c_void) -> CudaResult,
+    ctx_pop_current: unsafe extern "C" fn(*mut *mut c_void) -> CudaResult,
     module_load: unsafe extern "C" fn(
         *mut *mut c_void,
         *const c_void,
@@ -67,6 +83,9 @@ fn driver() -> Result<&'static Driver, String> {
                 device_get: *lib.get(b"cuDeviceGet").map_err(|e| e.to_string())?,
                 ctx_create: *lib.get(b"cuCtxCreate_v2").map_err(|e| e.to_string())?,
                 ctx_destroy: *lib.get(b"cuCtxDestroy_v2").map_err(|e| e.to_string())?,
+                ctx_get_current: *lib.get(b"cuCtxGetCurrent").map_err(|e| e.to_string())?,
+                ctx_set_current: *lib.get(b"cuCtxSetCurrent").map_err(|e| e.to_string())?,
+                ctx_pop_current: *lib.get(b"cuCtxPopCurrent_v2").map_err(|e| e.to_string())?,
                 module_load: *lib.get(b"cuModuleLoadDataEx").map_err(|e| e.to_string())?,
                 module_get_function: *lib.get(b"cuModuleGetFunction").map_err(|e| e.to_string())?,
                 launch: *lib.get(b"cuLaunchKernel").map_err(|e| e.to_string())?,
@@ -138,6 +157,22 @@ pub fn device_info() -> DeviceInfo {
 }
 
 /// A loaded module and its context (RAII).
+///
+/// The context is bound to no thread between calls: every device-touching
+/// method acquires it for the calling thread through `with_ctx` and restores
+/// the caller's previous current context before returning.
+///
+/// # SAFETY of `Send`/`Sync`
+///
+/// The raw handles are context/module IDs valid for the process lifetime of
+/// this object.  `Send` is sound because moving the handle between threads
+/// transfers ownership and no method relies on the creating thread's TLS
+/// state (the guard re-binds per call).  `Sync` is sound because shared
+/// `&Module` calls each make the context current on their own thread via
+/// `cuCtxSetCurrent` (per-thread in the driver) before touching the driver,
+/// and the driver serializes same-context operations internally.  The
+/// caller must not drop the `Module` while another thread is inside a
+/// guarded method.
 pub struct Module {
     ctx: *mut c_void,
     module: *mut c_void,
@@ -146,11 +181,59 @@ pub struct Module {
 unsafe impl Send for Module {}
 unsafe impl Sync for Module {}
 
+/// RAII binding of a module context to the calling thread.
+///
+/// On construction the module's context becomes current on this thread; on
+/// drop the thread's previous current context is restored.  Not `Send`/`Sync`
+/// by design: a guard is inherently bound to one thread's TLS slot.
+struct ContextGuard<'d> {
+    d: &'d Driver,
+    prev: *mut c_void,
+}
+
+impl<'d> ContextGuard<'d> {
+    /// Make `ctx` current on the calling thread, remembering the previous
+    /// current context (possibly null) for restoration.
+    fn acquire(d: &'d Driver, ctx: *mut c_void) -> Result<ContextGuard<'d>, String> {
+        // SAFETY: cuCtxGetCurrent/cuCtxSetCurrent are thread-safe driver
+        // calls on valid (possibly null) context handles; ctx belongs to this
+        // live Module and is therefore valid until the Module is dropped,
+        // which the caller must not do during a guarded call.
+        unsafe {
+            let mut prev: *mut c_void = std::ptr::null_mut();
+            ok((d.ctx_get_current)(&mut prev), "cuCtxGetCurrent")?;
+            ok((d.ctx_set_current)(ctx), "cuCtxSetCurrent")?;
+            Ok(ContextGuard { d, prev })
+        }
+    }
+}
+
+impl<'d> Drop for ContextGuard<'d> {
+    fn drop(&mut self) {
+        // SAFETY: restoring a previously-valid (possibly null) context handle
+        // on this thread; errors are ignored because the restore must not
+        // panic during unwinding and the previous value was current here.
+        unsafe {
+            let _ = (self.d.ctx_set_current)(self.prev);
+        }
+    }
+}
+
 impl Module {
-    /// Load PTX text into a fresh context on device 0.
+    /// Run `f` with this module's context current on the calling thread.
+    fn with_ctx<R>(&self, f: impl FnOnce(&Driver) -> Result<R, String>) -> Result<R, String> {
+        let d = driver()?;
+        let _g = ContextGuard::acquire(d, self.ctx)?;
+        f(d)
+    }
+
+    /// Load PTX text into a fresh context on device 0.  The created context
+    /// is popped off the loading thread before returning so the module owns a
+    /// context bound to no thread (each later call binds it explicitly).
     pub fn load(ptx: &[u8]) -> Result<Module, String> {
         let d = driver()?;
-        // SAFETY: standard driver init sequence.
+        // SAFETY: standard driver init sequence; the context is created
+        // current on this thread, then popped before returning (below).
         unsafe {
             ok((d.init)(0), "cuInit")?;
             let mut dev = 0i32;
@@ -169,45 +252,53 @@ impl Module {
                 let _ = (d.ctx_destroy)(ctx);
                 return Err(format!("cuModuleLoadDataEx error {rc}"));
             }
+            // Pop the context so no thread (including this one) is left with
+            // it current after load returns.
+            let mut popped: *mut c_void = std::ptr::null_mut();
+            let prc = (d.ctx_pop_current)(&mut popped);
+            if prc != 0 || popped != ctx {
+                let _ = (d.ctx_destroy)(ctx);
+                return Err(format!("cuCtxPopCurrent error {prc} (popped {popped:?})"));
+            }
             Ok(Module { ctx, module })
         }
     }
 
     fn function(&self, name: &str) -> Result<*mut c_void, String> {
-        let d = driver()?;
-        // SAFETY: name is a NUL-terminated C string; module handle valid.
-        unsafe {
-            let cname = std::ffi::CString::new(name).map_err(|e| e.to_string())?;
-            let mut f: *mut c_void = std::ptr::null_mut();
-            status((d.module_get_function)(&mut f, self.module, cname.as_ptr()))?;
-            Ok(f)
-        }
+        self.with_ctx(|d| {
+            // SAFETY: name is a NUL-terminated C string; module handle valid
+            // and its context current (guarded).
+            unsafe {
+                let cname = std::ffi::CString::new(name).map_err(|e| e.to_string())?;
+                let mut f: *mut c_void = std::ptr::null_mut();
+                status((d.module_get_function)(&mut f, self.module, cname.as_ptr()))?;
+                Ok(f)
+            }
+        })
     }
 
     fn alloc(&self, bytes: u64) -> Result<*mut c_void, String> {
-        let d = driver()?;
-        // SAFETY: cuMemAlloc on the current context with size > 0.
-        unsafe {
-            let mut p: *mut c_void = std::ptr::null_mut();
-            status((d.mem_alloc)(&mut p, bytes))?;
-            Ok(p)
-        }
+        self.with_ctx(|d| {
+            // SAFETY: cuMemAlloc on the (guarded) current context with size > 0.
+            unsafe {
+                let mut p: *mut c_void = std::ptr::null_mut();
+                status((d.mem_alloc)(&mut p, bytes))?;
+                Ok(p)
+            }
+        })
     }
 
     // SAFETY: frees a device pointer allocated by this module's context.
     fn free(&self, p: *mut c_void) -> Result<(), String> {
-        let d = driver()?;
-        unsafe { status((d.mem_free)(p)) }
+        self.with_ctx(|d| unsafe { status((d.mem_free)(p)) })
     }
 
     fn htod(&self, dev: *mut c_void, host: *const c_void, bytes: u64) -> Result<(), String> {
-        let d = driver()?;
-        unsafe { status((d.memcpy_htod)(dev, host, bytes)) }
+        self.with_ctx(|d| unsafe { status((d.memcpy_htod)(dev, host, bytes)) })
     }
 
     fn dtoh(&self, host: *mut c_void, dev: *const c_void, bytes: u64) -> Result<(), String> {
-        let d = driver()?;
-        unsafe { status((d.memcpy_dtoh)(host, dev, bytes)) }
+        self.with_ctx(|d| unsafe { status((d.memcpy_dtoh)(host, dev, bytes)) })
     }
 
     /// Launch `f` with `grid`/`block` geometry and per-argument pointers into
@@ -221,31 +312,32 @@ impl Module {
         base: *mut u8,
         offsets: &[usize],
     ) -> Result<(), String> {
-        let d = driver()?;
-        // SAFETY: base points to 8-byte-aligned live storage for the whole
-        // argument set; kernelParams entries point inside it; the default
-        // (legacy) stream serializes with the subsequent blocking memcpys on
-        // the same thread.
-        unsafe {
-            let mut kernel_params: Vec<*mut c_void> = offsets
-                .iter()
-                .map(|&o| base.add(o) as *mut c_void)
-                .collect();
-            let kp = kernel_params.as_mut_ptr();
-            status((d.launch)(
-                f,
-                grid,
-                1,
-                1,
-                block,
-                1,
-                1,
-                0,
-                std::ptr::null_mut(),
-                kp,
-                std::ptr::null_mut(),
-            ))
-        }
+        self.with_ctx(|d| {
+            // SAFETY: base points to 8-byte-aligned live storage for the whole
+            // argument set; kernelParams entries point inside it; the module
+            // context is current (guarded); the default (legacy) stream
+            // serializes with the subsequent blocking memcpys.
+            unsafe {
+                let mut kernel_params: Vec<*mut c_void> = offsets
+                    .iter()
+                    .map(|&o| base.add(o) as *mut c_void)
+                    .collect();
+                let kp = kernel_params.as_mut_ptr();
+                status((d.launch)(
+                    f,
+                    grid,
+                    1,
+                    1,
+                    block,
+                    1,
+                    1,
+                    0,
+                    std::ptr::null_mut(),
+                    kp,
+                    std::ptr::null_mut(),
+                ))
+            }
+        })
     }
 
     /// Fill `n` bytes of device memory with `pattern` using the Rust PTX

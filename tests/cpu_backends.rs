@@ -134,6 +134,17 @@ fn all_paths_equal(doc: &Document, req: &ObservationRequest) {
     let m = bm.materialize(req, BlockShape::W16H16).expect("blocked");
     assert_eq!(m.output.canonical_hash(), oh, "blocked parity");
 
+    // scalar-simple ablation row: same engine and eligibility as the SIMD
+    // paths, scalar kernels only (decomposes specialization vs SIMD gain)
+    if let Some(m) =
+        vole_gfx::materialize::simple::materialize_simple_scalar(&scene, req, BlockShape::W16H16)
+            .expect("scalar-simple")
+    {
+        assert_eq!(m.output.canonical_hash(), oh, "scalar-simple parity");
+    } else {
+        eprintln!("scalar-simple: not eligible, skipped on this scene");
+    }
+
     // forced avx2 path (skipped honestly when hardware lacks it)
     if avx2::has_avx2() {
         if let Some(m) = avx2::materialize_simple(&scene, req, BlockShape::W16H16).expect("avx2") {

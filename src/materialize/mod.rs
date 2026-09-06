@@ -9,6 +9,7 @@ pub mod blocked;
 pub mod blocks;
 pub mod dispatch;
 pub mod scalar;
+pub mod simple;
 
 pub use blocked::{BlockMaterializer, BlockMetrics};
 pub use scalar::{
