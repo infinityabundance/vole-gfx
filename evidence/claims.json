@@ -26,6 +26,29 @@
       "receipts": [
         "phase-c-blocking-indexing-c0c0d87f7125bc2a.json"
       ]
+    },
+    {
+      "id": "vole-gfx.phase-d.avx2",
+      "status": "demonstrated",
+      "statement": "AVX2 simple path (exact opaque integer-translation row blits + opaque fills + residual closure) is byte-identical to the scalar oracle; on the 1920x1080 200-sprite court this host (Zen5, AVX2) measured median materialization ~130us vs ~211ms scalar and ~13.7ms blocked.",
+      "domain": "vole.gfx.u1 exact profile, eligible subset, this host+commit; see receipt cpu-backend-matrix (phase d)",
+      "receipts": [
+        "cpu-backend-matrix-04dc35fc2d5245e6.json"
+      ]
+    },
+    {
+      "id": "vole-gfx.phase-e.avx512",
+      "status": "demonstrated",
+      "statement": "AVX-512 simple path reproduces the same bytes; on this court it measured ~144us vs ~130us AVX2 \u2014 AVX-512 loses on this memory-bound workload (retained as negative evidence; no assumed 512>256 win).",
+      "domain": "vole.gfx.u1 exact profile, eligible subset, this host+commit; see receipt cpu-backend-matrix (phase e)",
+      "receipts": []
+    },
+    {
+      "id": "vole-gfx.phase-f.rayon",
+      "status": "demonstrated",
+      "statement": "Rayon band-parallel materialization is byte-identical to the oracle and deterministic across band heights and thread counts; on this court rayon-avx2 ~268us, rayon-avx512 ~284us, rayon-scalar ~2.7ms (band height 64, block 16x16).",
+      "domain": "vole.gfx.u1 exact profile, this host+commit; see receipt cpu-backend-matrix (phase f)",
+      "receipts": []
     }
   ]
 }

@@ -198,8 +198,8 @@ fn run(cli: Cli) -> i32 {
                     let hash = m.output.canonical_hash().to_hex();
                     let doc_bytes = vole_gfx::ir::encode::encode(&doc).len() as u64;
                     let persistent_bytes = doc_bytes;
-                    if let Some(p) = out {
-                        if let Err(e) = vole_gfx::io::write_pnm(
+                    if let Some(p) = out
+                        && let Err(e) = vole_gfx::io::write_pnm(
                             std::path::Path::new(&p),
                             w,
                             h,
@@ -208,7 +208,6 @@ fn run(cli: Cli) -> i32 {
                         ) {
                             return fail("materialize", e, json);
                         }
-                    }
                     let data = serde_json::json!({
                         "file": file,
                         "time_ns": t,

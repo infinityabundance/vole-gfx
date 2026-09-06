@@ -321,11 +321,10 @@ impl<'a> BlockMaterializer<'a> {
         for &inst_i in &self.scratch_candidates {
             c.instance_tests += 1;
             let inst = &scene.instances[inst_i as usize];
-            if let Some(b) = inst.bounds_px {
-                if !b.contains_px(px, py) {
+            if let Some(b) = inst.bounds_px
+                && !b.contains_px(px, py) {
                     continue;
                 }
-            }
             draws += 1;
             let Some(local) = sample_placed(scene, inst, cx) else {
                 continue;
@@ -401,15 +400,14 @@ fn sample_placed(
     inst: &crate::state::PlacedInstance<'_>,
     cx: Vec2,
 ) -> Option<Rgba> {
-    if let Some(clip) = inst.clip {
-        if !((cx.x as i64) >= (clip.x0 as i64)
+    if let Some(clip) = inst.clip
+        && !((cx.x as i64) >= (clip.x0 as i64)
             && (cx.x as i64) < (clip.x1 as i64)
             && (cx.y as i64) >= (clip.y0 as i64)
             && (cx.y as i64) < (clip.y1 as i64))
         {
             return None;
         }
-    }
     let aff = inst.affine();
     let (lx, ly) = super::scalar::inv_sample_pub(&aff, cx)?;
     let obj = inst.object();

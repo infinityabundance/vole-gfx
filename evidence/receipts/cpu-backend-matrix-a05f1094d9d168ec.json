@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "run_id": "cpu-backend-matrix-a05f1094d9d168ec",
+  "timestamp_unix_ms": 1788730242760,
+  "git_commit": "52b8d7ed50ed22df4a23f6a214cdf3dee62b98b5",
+  "git_dirty": true,
+  "command": "target/release/examples/cpu_matrix_gate f",
+  "court": "cpu-backend-matrix",
+  "universe": "vole.gfx.u1",
+  "profile": "exact-u1",
+  "backend": "rayon-auto+matrix",
+  "exact": true,
+  "inputs": {
+    "phase": "f"
+  },
+  "outputs": {
+    "auto_dispatch_path": "avx512",
+    "canonical_hash": "162c5cb9532126d31bd1a555e5cb14387955d2459da900694286c6cfc059390a",
+    "surface": "1920x1080 rgba8 200 sprites"
+  },
+  "canonical_hash": "162c5cb9532126d31bd1a555e5cb14387955d2459da900694286c6cfc059390a",
+  "reference_hash": "162c5cb9532126d31bd1a555e5cb14387955d2459da900694286c6cfc059390a",
+  "metrics": {
+    "avx2_ns": 132688,
+    "avx512_ns": 145922,
+    "blocked_ns": 13575508,
+    "oracle_scalar_ns": 225796823,
+    "rayon-auto_ns": 278780,
+    "rayon-avx2_ns": 268020,
+    "rayon-avx512_ns": 283949,
+    "rayon-scalar_ns": 2735691,
+    "scalar_ns": 229021996
+  },
+  "quality_metric": null,
+  "quality_value": null,
+  "persistent_bytes": 18717,
+  "residual_bytes": 0,
+  "samples_requested": 2073600,
+  "samples_evaluated": 0,
+  "pass": true,
+  "unsupported_reason": null,
+  "notes": [
+    "all measured backends byte-identical to scalar oracle; host dispatch: avx2=true avx512=true"
+  ],
+  "environment": {
+    "cpu": {
+      "vendor_model": ": AMD Ryzen 7 9800X3D 8-Core Processor",
+      "cores": 16,
+      "avx2": true,
+      "avx512_subfeatures": [
+        "avx512f",
+        "avx512dq",
+        "avx512ifma",
+        "avx512cd",
+        "avx512bw",
+        "avx512vl",
+        "avx512_bf16",
+        "avx512vbmi",
+        "avx512_vbmi2",
+        "avx512_vnni",
+        "avx512_bitalg",
+        "avx512_vpopcntdq",
+        "avx512_vp2intersect"
+      ]
+    },
+    "gpu": {
+      "present": true,
+      "name": "NVIDIA GeForce RTX 4080 SUPER",
+      "driver": "610.57.04",
+      "cuda_umd": "NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  610.57.04  Release Build  (root@vanir)"
+    },
+    "compiler": {
+      "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8",
+      "rustc_version": "1.98.0",
+      "llvm": "22.1.8",
+      "profile": null,
+      "target_cpu": null
+    },
+    "system": {
+      "os": "linux",
+      "kernel": "7.2.2-1-cachyos"
+    },
+    "git_commit": "52b8d7ed50ed22df4a23f6a214cdf3dee62b98b5",
+    "git_dirty": true
+  },
+  "receipt_hash": "5916e043b31126c21c566923b8570c131038f7b0a3e1afbf4303b225f97ec5ae"
+}

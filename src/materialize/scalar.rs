@@ -279,15 +279,14 @@ fn covers_shifted(cx: Vec2, r: &crate::fixed::RectF, dx: i32, dy: i32) -> bool {
 /// Sample one placed instance at scene point `cx`.  Returns `None` when the
 /// instance does not cover the sample (bounds, clip, or local out-of-range).
 fn sample_instance(scene: &Scene<'_>, inst: &PlacedInstance<'_>, cx: Vec2) -> Option<Rgba> {
-    if let Some(clip) = inst.clip {
-        if !((cx.x as i64) >= (clip.x0 as i64)
+    if let Some(clip) = inst.clip
+        && !((cx.x as i64) >= (clip.x0 as i64)
             && (cx.x as i64) < (clip.x1 as i64)
             && (cx.y as i64) >= (clip.y0 as i64)
             && (cx.y as i64) < (clip.y1 as i64))
         {
             return None;
         }
-    }
     // Fast conservative reject: sample pixel outside the transformed extent.
     if let Some(b) = inst.bounds_px {
         let px = (cx.x >> 16, cx.y >> 16);

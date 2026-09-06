@@ -67,14 +67,13 @@ fn random_mutations_never_panic_through_full_pipeline() {
             let pos = rng.below(b.len() as u32) as usize;
             b[pos] = rng.u8();
         }
-        if let Ok(d) = decode(&b) {
-            if vole_gfx::ir::validate::validate(&d).is_ok() {
+        if let Ok(d) = decode(&b)
+            && vole_gfx::ir::validate::validate(&d).is_ok() {
                 // hostile but valid: materialization must still be total
                 let req = surface(0, 8, 8, vole_gfx::color::ColorFormat::Rgba8);
                 let _ = vole_gfx::materialize::scalar::materialize_document(&d, &req);
                 ok_count += 1;
             }
-        }
     }
     // a good share of single/double byte mutations of a small doc stay valid
     assert!(ok_count > 0);

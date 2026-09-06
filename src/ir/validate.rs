@@ -117,11 +117,10 @@ fn validate_trajectories(doc: &Document) -> Result<(), Reject> {
         }
         let mut prev_t: Option<u64> = None;
         for k in &tr.keys {
-            if let Some(pt) = prev_t {
-                if k.t <= pt {
+            if let Some(pt) = prev_t
+                && k.t <= pt {
                     return Err(Reject::NonCanonicalOrder);
                 }
-            }
             if (k.tx as i64).abs() > crate::limits::INST_TRANSLATION_LIMIT
                 || (k.ty as i64).abs() > crate::limits::INST_TRANSLATION_LIMIT
             {
@@ -157,11 +156,10 @@ fn check_instance(doc: &Document, inst: &Instance, ids: &mut HashSet<u32>) -> Re
             return Err(Reject::InvalidIndex);
         }
     }
-    if let Some(clip) = inst.clip {
-        if !clip.valid() {
+    if let Some(clip) = inst.clip
+        && !clip.valid() {
             return Err(Reject::CoordinateOutOfRange);
         }
-    }
     if inst.trajectory != 0 && inst.trajectory as usize > doc.trajectories.len() {
         return Err(Reject::MissingObject);
     }
@@ -205,15 +203,14 @@ fn check_placement(
     if !cap(transform.tx) || !cap(transform.ty) {
         return Err(Reject::CoordinateOutOfRange);
     }
-    if trajectory != 0 {
-        if let Some(tr) = doc.trajectories.get(trajectory as usize - 1) {
+    if trajectory != 0
+        && let Some(tr) = doc.trajectories.get(trajectory as usize - 1) {
             for k in &tr.keys {
                 if !cap(k.tx) || !cap(k.ty) {
                     return Err(Reject::CoordinateOutOfRange);
                 }
             }
         }
-    }
     Ok(())
 }
 
@@ -226,11 +223,10 @@ fn validate_events(doc: &Document) -> Result<(), Reject> {
     }
     let mut prev_t: Option<u64> = None;
     for ev in &doc.events {
-        if let Some(pt) = prev_t {
-            if ev.t <= pt {
+        if let Some(pt) = prev_t
+            && ev.t <= pt {
                 return Err(Reject::OutOfOrderTime);
             }
-        }
         prev_t = Some(ev.t);
         for o in &ev.ops {
             apply_op_validate(doc, o, &mut live)?;
@@ -268,11 +264,10 @@ fn apply_op_validate(doc: &Document, o: &Op, live: &mut HashSet<u32>) -> Result<
                     return Err(Reject::InvalidIndex);
                 }
             }
-            if let Some(clip) = c.clip {
-                if !clip.valid() {
+            if let Some(clip) = c.clip
+                && !clip.valid() {
                     return Err(Reject::CoordinateOutOfRange);
                 }
-            }
         }
         Op::InstDelete { instance } => {
             if !live.remove(instance) {
@@ -318,11 +313,10 @@ fn apply_op_validate(doc: &Document, o: &Op, live: &mut HashSet<u32>) -> Result<
             if !live.contains(instance) {
                 return Err(Reject::InvalidIndex);
             }
-            if let Some(clip) = clip {
-                if !clip.valid() {
+            if let Some(clip) = clip
+                && !clip.valid() {
                     return Err(Reject::CoordinateOutOfRange);
                 }
-            }
         }
         Op::PaletteSet {
             object,

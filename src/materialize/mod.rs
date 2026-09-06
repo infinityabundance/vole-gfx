@@ -7,6 +7,7 @@
 
 pub mod blocked;
 pub mod blocks;
+pub mod dispatch;
 pub mod scalar;
 
 pub use blocked::{BlockMaterializer, BlockMetrics};

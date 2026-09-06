@@ -2,7 +2,7 @@
 name = "vole-gfx"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.89"
 description = "VOLE-GFX: deterministic procedural visual state as a graphics intermediate representation. One crate: exact U1 semantics, canonical IR, scalar/AVX2/AVX-512/Rayon/CUDA materializers, inverse procedural compiler, evidence receipts."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/infinityabundance/vole-gfx"

@@ -27,7 +27,7 @@ pub fn write_pnm(
     match format {
         ColorFormat::Gray8 => out.extend_from_slice(data),
         ColorFormat::Rgba8 => {
-            for px in data.chunks_exact(4) {
+            for px in data.as_chunks::<4>().0 {
                 out.extend_from_slice(&px[..3]);
             }
         }
@@ -74,7 +74,7 @@ pub fn read_pnm(bytes: &[u8]) -> Result<(u32, u32, ColorFormat, Vec<u8>), Reject
     match format {
         ColorFormat::Gray8 => data.extend_from_slice(&bytes[pos..pos + need as usize]),
         ColorFormat::Rgba8 => {
-            for px in bytes[pos..pos + need as usize].chunks_exact(3) {
+            for px in bytes[pos..pos + need as usize].as_chunks::<3>().0 {
                 data.extend_from_slice(&[px[0], px[1], px[2], 255]);
             }
         }

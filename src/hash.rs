@@ -29,7 +29,7 @@ impl ContentId {
             return None;
         }
         let mut out = [0u8; 32];
-        for (i, pair) in hex.as_bytes().chunks_exact(2).enumerate() {
+        for (i, pair) in hex.as_bytes().as_chunks::<2>().0.iter().enumerate() {
             let hi = hexval(pair[0])?;
             let lo = hexval(pair[1])?;
             out[i] = (hi << 4) | lo;
