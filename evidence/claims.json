@@ -17,6 +17,15 @@
       "receipts": [
         "phase-b-conformance-residual-8e0fb708711472d5.json"
       ]
+    },
+    {
+      "id": "vole-gfx.phase-c.blocking-indexing",
+      "status": "demonstrated",
+      "statement": "Blocked materializer (uniform-grid dependency index + per-block op culling + memoized copy/move prefix evaluation) is byte-for-byte identical to the scalar oracle across all swept block shapes at 1920x1080 (150 instances, fills, copies, sparse residual); a 1% domain region costs ~0.6% of full-surface work on this host and commit (work tracks requested samples, not full surface).",
+      "domain": "vole.gfx.u1 exact profile, scalar vs blocked CPU backends, this host+commit; see receipt phase-c-*",
+      "receipts": [
+        "phase-c-blocking-indexing-c0c0d87f7125bc2a.json"
+      ]
     }
   ]
 }

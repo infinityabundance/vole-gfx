@@ -5,9 +5,11 @@
 //! oracle**: every accelerated backend must reproduce its output byte for
 //! byte, verified by canonical output hashes.
 
+pub mod blocked;
 pub mod blocks;
 pub mod scalar;
 
+pub use blocked::{BlockMaterializer, BlockMetrics};
 pub use scalar::{
     Counters, Materialized, materialize_document, materialize_pixel, materialize_scene,
 };

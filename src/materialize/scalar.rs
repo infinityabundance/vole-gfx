@@ -84,7 +84,7 @@ pub fn materialize_scene(
         let mut out = Output::new(n as u32, 1, req.format)?;
         for (k, &(x, y)) in pts.iter().enumerate() {
             let rgba = compose_pixel(scene, x, y, &mut counters)?;
-            let code = encode_code(rgba, req.format);
+            let code = encode_code_pub(rgba, req.format);
             let off = k * req.format.bytes_per_sample();
             write_code(&mut out.data, off, code);
             counters.samples += 1;
@@ -100,7 +100,7 @@ pub fn materialize_scene(
                         counters.residual_format_skips += 1;
                         continue;
                     }
-                    apply_residual_at(
+                    apply_residual_at_pub(
                         *algebra,
                         region,
                         req.format,
@@ -132,7 +132,7 @@ pub fn materialize_scene(
         for i in 0..w {
             let x = b.x0 + i as i32;
             let rgba = compose_pixel(scene, x, y, &mut counters)?;
-            let code = encode_code(rgba, req.format);
+            let code = encode_code_pub(rgba, req.format);
             write_code(
                 &mut out.data,
                 (row_off + i as usize) * req.format.bytes_per_sample(),
@@ -155,7 +155,7 @@ pub fn materialize_scene(
                 counters.residual_format_skips += 1;
                 continue;
             }
-            apply_residual(
+            apply_residual_pub(
                 *algebra,
                 region,
                 req.format,
@@ -296,7 +296,7 @@ fn sample_instance(scene: &Scene<'_>, inst: &PlacedInstance<'_>, cx: Vec2) -> Op
         }
     }
     let aff = inst.affine();
-    let (lx, ly) = inv_sample(&aff, cx)?;
+    let (lx, ly) = inv_sample_pub(&aff, cx)?;
     let obj = inst.object();
     match obj {
         Object::Raster {
@@ -305,7 +305,7 @@ fn sample_instance(scene: &Scene<'_>, inst: &PlacedInstance<'_>, cx: Vec2) -> Op
             h,
             data,
         } => {
-            let (i, j) = in_bounds(lx, ly, *w, *h)?;
+            let (i, j) = in_bounds_pub(lx, ly, *w, *h)?;
             let o = ((j * w) + i) as usize * 4;
             Some(Rgba::from_bytes([
                 data[o],
@@ -320,12 +320,12 @@ fn sample_instance(scene: &Scene<'_>, inst: &PlacedInstance<'_>, cx: Vec2) -> Op
             h,
             data,
         } => {
-            let (i, j) = in_bounds(lx, ly, *w, *h)?;
+            let (i, j) = in_bounds_pub(lx, ly, *w, *h)?;
             let g = data[(j * w + i) as usize];
             Some(Rgba::gray(g))
         }
         Object::IndexedRaster { w, h, indices, .. } => {
-            let (i, j) = in_bounds(lx, ly, *w, *h)?;
+            let (i, j) = in_bounds_pub(lx, ly, *w, *h)?;
             let idx = indices[(j * w + i) as usize];
             let pal_id = inst.palette.unwrap_or_else(|| match obj {
                 Object::IndexedRaster { pal, .. } => *pal,
@@ -339,7 +339,7 @@ fn sample_instance(scene: &Scene<'_>, inst: &PlacedInstance<'_>, cx: Vec2) -> Op
 
 /// Exact inverse affine sample: local pixel coordinates (i64, range-guarded)
 /// or `None` for degenerate transforms.
-fn inv_sample(aff: &crate::fixed::Affine, p: Vec2) -> Option<(i64, i64)> {
+pub(crate) fn inv_sample_pub(aff: &crate::fixed::Affine, p: Vec2) -> Option<(i64, i64)> {
     let a = aff.a as i64;
     let b = aff.b as i64;
     let c = aff.c as i64;
@@ -378,7 +378,7 @@ fn floor_div(a: i64, b: i64) -> i64 {
     }
 }
 
-fn in_bounds(lx: i64, ly: i64, w: u32, h: u32) -> Option<(u32, u32)> {
+pub(crate) fn in_bounds_pub(lx: i64, ly: i64, w: u32, h: u32) -> Option<(u32, u32)> {
     if lx >= 0 && ly >= 0 && lx < w as i64 && ly < h as i64 {
         Some((lx as u32, ly as u32))
     } else {
@@ -388,7 +388,7 @@ fn in_bounds(lx: i64, ly: i64, w: u32, h: u32) -> Option<(u32, u32)> {
 
 /// Convert a composed RGBA sample into the request format's code value
 /// (4 bytes; `Gray8` uses the low byte).
-fn encode_code(c: Rgba, format: ColorFormat) -> ([u8; 4], usize) {
+pub(crate) fn encode_code_pub(c: Rgba, format: ColorFormat) -> ([u8; 4], usize) {
     match format {
         ColorFormat::Rgba8 => (c.to_bytes(), 4),
         ColorFormat::Gray8 => {
@@ -405,9 +405,13 @@ fn write_code(dst: &mut [u8], off: usize, code: ([u8; 4], usize)) {
     dst[off..off + n].copy_from_slice(&bytes[..n]);
 }
 
+pub(crate) fn write_code_pub(dst: &mut [u8], off: usize, code: ([u8; 4], usize)) {
+    write_code(dst, off, code);
+}
+
 /// Apply one residual binding to the output buffer.
 #[allow(clippy::too_many_arguments)] // domain-clip context; refactor with court struct later
-fn apply_residual(
+pub(crate) fn apply_residual_pub(
     algebra: u8,
     region: &IRect,
     format: ColorFormat,
@@ -461,7 +465,7 @@ fn apply_residual(
 /// irregular-sample path).  The record scan is linear; fine for the scalar
 /// oracle.
 #[allow(clippy::too_many_arguments)]
-fn apply_residual_at(
+pub(crate) fn apply_residual_at_pub(
     algebra: u8,
     region: &IRect,
     format: ColorFormat,

@@ -7,6 +7,7 @@
 //! time is ≤ the request time.  Raster surfaces are never stored here — this
 //! is the "no mandatory re-baking" boundary.
 
+pub mod index;
 pub mod trajectory;
 pub mod transition;
 

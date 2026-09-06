@@ -18,7 +18,7 @@ was initialized during Phase A.
 |---|---|---|---|
 | A | Exact U1 model, IR, parser, limits, scalar 2D semantics | implemented | phase-a |
 | B | Canonical conformance vectors, exact residual closure | next | – |
-| C | Blocking + dependency indexing | pending | – |
+| C | Blocking + dependency indexing | implemented | phase-c |
 | D/E | AVX2 / AVX-512 backends | pending | – |
 | F | Rayon + SIMD | pending | – |
 | G | Rust CUDA PTX device + host | pending | – |
