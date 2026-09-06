@@ -50,7 +50,9 @@
       "status": "demonstrated",
       "statement": "Rayon band-parallel materialization is byte-identical to the oracle and deterministic across band heights and thread counts; on this court rayon-avx2 ~268us, rayon-avx512 ~284us, rayon-scalar ~2.7ms (band height 64, block 16x16).",
       "domain": "vole.gfx.u1 exact profile, this host+commit; see receipt cpu-backend-matrix (phase f)",
-      "receipts": []
+      "receipts": [
+        "cpu-backend-matrix-f78c2b793577e3d2.json"
+      ]
     }
   ]
 }
