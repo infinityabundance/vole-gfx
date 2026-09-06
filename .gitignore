@@ -1,0 +1,13 @@
+# User research material and prompt copies are not part of the implementation.
+/research/
+/vole-gfx-prompt.txt
+
+# Rust build artifacts
+/target/
+Cargo.lock.bak
+*.rs.bk
+
+# Editor/OS noise
+*.swp
+*.swo
+.DS_Store

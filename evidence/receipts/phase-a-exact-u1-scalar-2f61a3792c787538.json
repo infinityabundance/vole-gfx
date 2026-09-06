@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "run_id": "phase-a-exact-u1-scalar-2f61a3792c787538",
+  "timestamp_unix_ms": 1788728974293,
+  "git_commit": null,
+  "git_dirty": true,
+  "command": "target/release/examples/phase_a_gate",
+  "court": "phase-a-exact-u1-scalar",
+  "universe": "vole.gfx.u1",
+  "profile": "exact-u1",
+  "backend": "scalar",
+  "exact": true,
+  "inputs": {
+    "doc_events": "2",
+    "doc_instances": "2",
+    "doc_objects": "3",
+    "serialized_bytes": "502"
+  },
+  "outputs": {
+    "canonical_hash": "566e5d1dba76c8593c1836e76d74a497561b069ee23982f007aeead2f1c23e83",
+    "surface": "320x180 rgba8 @ t=16666667"
+  },
+  "canonical_hash": "566e5d1dba76c8593c1836e76d74a497561b069ee23982f007aeead2f1c23e83",
+  "reference_hash": null,
+  "metrics": {
+    "instance_draws": 16,
+    "instance_tests": 117600,
+    "ops_applied": 60000
+  },
+  "quality_metric": null,
+  "quality_value": null,
+  "persistent_bytes": 502,
+  "residual_bytes": 0,
+  "samples_requested": 57600,
+  "samples_evaluated": 57600,
+  "pass": true,
+  "unsupported_reason": null,
+  "notes": [
+    "decode(encode(x))==x; canonical form verified; deterministic double-materialization hash equal; partial domain == full-surface crop"
+  ],
+  "environment": {
+    "cpu": {
+      "vendor_model": ": AMD Ryzen 7 9800X3D 8-Core Processor",
+      "cores": 16,
+      "avx2": true,
+      "avx512_subfeatures": [
+        "avx512f",
+        "avx512dq",
+        "avx512ifma",
+        "avx512cd",
+        "avx512bw",
+        "avx512vl",
+        "avx512_bf16",
+        "avx512vbmi",
+        "avx512_vbmi2",
+        "avx512_vnni",
+        "avx512_bitalg",
+        "avx512_vpopcntdq",
+        "avx512_vp2intersect"
+      ]
+    },
+    "gpu": {
+      "present": true,
+      "name": "NVIDIA GeForce RTX 4080 SUPER",
+      "driver": "610.57.04",
+      "cuda_umd": "NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  610.57.04  Release Build  (root@vanir)"
+    },
+    "compiler": {
+      "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8",
+      "rustc_version": "1.98.0",
+      "llvm": "22.1.8",
+      "profile": null,
+      "target_cpu": null
+    },
+    "system": {
+      "os": "linux",
+      "kernel": "7.2.2-1-cachyos"
+    },
+    "git_commit": null,
+    "git_dirty": true
+  },
+  "receipt_hash": "ca130e17fc9ddaba84a00f0952a23b9d78e4f22478959c69d6539fc194a1e802"
+}

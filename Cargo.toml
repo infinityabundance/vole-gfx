@@ -1,0 +1,49 @@
+[package]
+name = "vole-gfx"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "VOLE-GFX: deterministic procedural visual state as a graphics intermediate representation. One crate: exact U1 semantics, canonical IR, scalar/AVX2/AVX-512/Rayon/CUDA materializers, inverse procedural compiler, evidence receipts."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/infinityabundance/vole-gfx"
+keywords = ["procedural", "graphics", "materialization", "ir", "deterministic"]
+categories = ["graphics", "multimedia::encoding", "science"]
+
+# ---------------------------------------------------------------------------
+# Dependency policy (one crate):
+#  - host CUDA driver binding and Vulkan are OPTIONAL features so that plain
+#    CPU builds need no external graphics SDKs.
+#  - cudarc / ash are only added via `cargo add` when the corresponding phase
+#    actually lands; features exist now so module cfg-gates are stable.
+# ---------------------------------------------------------------------------
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+rayon = "1.10"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[features]
+default = []
+# Host-side CUDA driver interaction (cudarc). Device code itself is Rust PTX.
+cuda = []
+# Compile the crate (or --lib with --no-default-features) as no_std device code
+# for the nvptx64-nvidia-cuda target.
+cuda-device = []
+# Vulkan (ash) for experimental external-resource / display work.
+vulkan = []
+# Experimental direct-display (DRM/KMS + Vulkan display) prototype.
+direct = ["vulkan"]
+
+[profile.release]
+debug = 1
+lto = "thin"
+codegen-units = 4
+
+[profile.bench]
+debug = 0
+lto = "thin"

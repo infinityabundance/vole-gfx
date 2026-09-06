@@ -1,0 +1,13 @@
+{
+  "claims": [
+    {
+      "id": "vole-gfx.phase-a.exact-u1-scalar",
+      "status": "demonstrated",
+      "statement": "On the phase-a exact-U1 scalar court, the canonical IR round-trips (decode(encode(x))==x, canonical form verified), the scalar materializer is deterministic (identical canonical SHA-256 across repeated materializations), and partial-domain requests equal full-surface crops, on this host and commit.",
+      "domain": "vole.gfx.u1 exact profile, scalar backend, CPU, single commit; see receipt phase-a-*",
+      "receipts": [
+        "phase-a-exact-u1-scalar-2f61a3792c787538.json"
+      ]
+    }
+  ]
+}
