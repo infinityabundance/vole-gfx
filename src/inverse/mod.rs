@@ -19,23 +19,15 @@ pub mod asset;
 pub mod candidate;
 pub mod detect;
 pub mod frontier;
+pub mod structure;
 
 use crate::fixed::IRect;
 use crate::ir::{Document, Object};
 use crate::limits::Reject;
 use asset::Asset;
 use candidate::Candidate;
-use detect::{literal_object, propose};
+use detect::{literal_object, one_object_doc, propose};
 use frontier::Frontier;
-
-/// Build the document for a proposal: the generator (or literal) object at
-/// the origin, plus (after evaluation) its residual binding.
-fn proposal_doc(object: Object) -> Document {
-    let mut d = Document::new();
-    d.objects.push(object);
-    d.instances.push(candidate::origin_instance(0, 1, 0));
-    d
-}
 
 /// Deterministic materialization-work model of a candidate document over a
 /// surface of `samples` requested samples: `samples x per-sample cost`, where
@@ -125,11 +117,10 @@ fn finalize(name: &str, doc0: &Document, asset: &Asset, work: u64) -> Result<Can
 pub fn unbake(asset: &Asset) -> Result<Frontier, Reject> {
     let mut f = Frontier::default();
     for p in propose(asset) {
-        let doc = proposal_doc(p.object);
-        f.insert(finalize(p.name, &doc, asset, p.work)?);
+        f.insert(finalize(p.name, &p.doc, asset, p.work)?);
     }
     // literal fallback last (deterministic order)
-    let doc = proposal_doc(literal_object(asset));
+    let doc = one_object_doc(literal_object(asset));
     f.insert(finalize("literal", &doc, asset, 1)?);
     Ok(f)
 }

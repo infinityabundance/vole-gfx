@@ -7,7 +7,7 @@
 
 use super::asset::Asset;
 use crate::color::Rgba;
-use crate::ir::Object;
+use crate::ir::{Document, Instance, Object};
 use crate::procedural::build;
 use crate::procedural::families::{palette, tiled};
 
@@ -15,14 +15,33 @@ use crate::procedural::families::{palette, tiled};
 /// (bounded search; courts keep assets small, large assets fall back).
 pub const PERIOD_SCAN_LIMIT: u32 = 4096;
 
-/// A generator proposal: one object that, placed at the origin over the
-/// asset's extent, is a candidate explanation.
+/// A generator proposal: a self-contained document (one or more objects +
+/// instances, e.g. a background field plus sprite overlay) that, materialized
+/// at the asset's surface, is a candidate explanation.
 #[derive(Debug, Clone)]
 pub struct Proposal {
     pub name: &'static str,
-    pub object: Object,
+    pub doc: Document,
     /// Deterministic work units spent to produce this proposal.
     pub work: u64,
+}
+
+/// Build the canonical single-object document: `object` placed at the origin
+/// (object extent == asset surface by construction in the detectors).
+pub fn one_object_doc(object: Object) -> Document {
+    let mut d = Document::new();
+    d.objects.push(object);
+    d.instances.push(Instance {
+        object: 0,
+        order: 1,
+        layer: 0,
+        transform: crate::fixed::Affine::identity(),
+        palette: None,
+        clip: None,
+        trajectory: 0,
+        visible: true,
+    });
+    d
 }
 
 /// Enumerate proposals for an asset in a deterministic order.
@@ -36,11 +55,16 @@ pub fn propose(asset: &Asset) -> Vec<Proposal> {
     palette_bands(asset, &mut out);
     tiled(asset, &mut out);
     gradients(asset, &mut out);
+    super::structure::propose(asset, &mut out); // Phase J structural reuse
     out
 }
 
 fn push(out: &mut Vec<Proposal>, name: &'static str, object: Object, work: u64) {
-    out.push(Proposal { name, object, work });
+    out.push(Proposal {
+        name,
+        doc: one_object_doc(object),
+        work,
+    });
 }
 
 /// Number of distinct code values in the asset (bounded scan).

@@ -25,7 +25,8 @@ Cargo package (`vole-gfx`); no workspace, no subcrates.
 | G | Rust CUDA PTX device + host | implemented (byte-kernel parity) | phase-g |
 | H | Procedural state, generators, trajectories | implemented | phase-h |
 | I | Inverse procedural asset compiler — scalar | implemented | phase-i |
-| J–N | Structural reuse; SIMD/Rayon/CUDA search; DSFB | pending | – |
+| J | Structural fingerprints, sprite extraction, object reuse | implemented | phase-j |
+| K–N | SIMD/Rayon/CUDA search; residual factoring; DSFB | pending | – |
 | O | Corpus (100+ assets) + negative controls | pending | – |
 | P–R | No-rebake / observation / partial courts | pending | – |
 | S–T | CUDA↔Vulkan, direct display | unsupported (hardware gate) | – |
@@ -130,27 +131,28 @@ Cargo package (`vole-gfx`); no workspace, no subcrates.
   scalar/blocked/rayon/auto for full/region/tile/band/irregular domains;
   adversarial param blobs fail closed at decode and validation.
 
-## Explicit non-claims (as of Phase I)
+## Explicit non-claims (as of Phase J)
 
 No claim of inverse compilation beyond the receipted scalar detector set
-(Phases J–N pending: structural reuse, affine/symmetry factoring, seeded-
-field search, SIMD/Rayon/CUDA search, recursive factorization, DSFB). No
-claim that any detector recovers an author's semantics. No claim that a
-detected explanation is optimal over unseen families — the frontier is over
-the *evaluated* candidate set, and the literal fallback bounds the loss. No
-claim that any generator "explains" pixels outside byte-exact reconstruction
-with counted state. No claim of procedural *computing* from storage savings
-(no-rebake court is Phase P). No CUDA claim for generators or inverse search
-(CPU-only through I; byte-kernel parity is the only CUDA claim). Only the
-CONSTANT family participates in the SIMD fill fast path in Phase H; other
-families run exact scalar/blocked evaluation. Palette fields embed their
-palette in the params and are not animatable by timeline `PaletteSet` ops in
-this phase. No claim that CUDA beats CPU or vice versa beyond the exact
-receipted domains. No claim that AVX-512 is faster than AVX2 — the retained
-phase-e measurement says the opposite on this court. No direct-display claim
-(Phases S–T unsupported pending hardware path verification). CUDA equality
-is claimed only on hosts with a genuine NVIDIA device; elsewhere it is `not
-evaluated on this host`.
+(Phases K–N pending: SIMD/Rayon/CUDA search, recursive factorization, DSFB;
+seeded-field *search* and symmetry/affine detectors beyond the sprite
+reuse of J are future work). No claim that any detector recovers an author's
+semantics. No claim that a detected explanation is optimal over unseen
+families — the frontier is over the *evaluated* candidate set, and the
+literal fallback bounds the loss. No claim that any generator "explains"
+pixels outside byte-exact reconstruction with counted state. No claim of
+procedural *computing* from storage savings (no-rebake court is Phase P). No
+CUDA claim for generators or inverse search (CPU-only through J;
+byte-kernel parity is the only CUDA claim). Only the CONSTANT family
+participates in the SIMD fill fast path in Phase H; other families run exact
+scalar/blocked evaluation. Palette fields embed their palette in the params
+and are not animatable by timeline `PaletteSet` ops in this phase. No claim
+that CUDA beats CPU or vice versa beyond the exact receipted domains. No
+claim that AVX-512 is faster than AVX2 — the retained phase-e measurement
+says the opposite on this court. No direct-display claim (Phases S–T
+unsupported pending hardware path verification). CUDA equality is claimed
+only on hosts with a genuine NVIDIA device; elsewhere it is `not evaluated
+on this host`.
 
 ## What Phase I added (scalar inverse compiler)
 
@@ -173,11 +175,24 @@ evaluated on this host`.
   residual where detected, the noise control falls back to literal, and all
   winners reproduce their assets byte-for-byte.
 
+## What Phase J added (structural reuse)
+
+- **Composite proposals**: inverse candidates may now be multi-object
+  documents (a field + shared sprites), since reuse is compositional.
+- **Structural detectors** (`inverse::structure`): dominant-field color
+  fingerprint, 4-connected labeling of foreground components, content
+  classes grouped by byte-equal crops, then
+  `sprite-on-field` (field + one shared crop) and `sprite-repeat` (the same
+  crop stored once and placed at every occurrence).  Byte-exact by
+  construction and re-verified by evaluation.
+- **Evidence**: phase-j gate: sprite-on-field at 524 B persistent / zero
+  residual, sprite-repeat with 2 copies 570 B, 3 copies 616 B (crop stored
+  once, N placements) vs ~12 KB literal; the noise negative control stays on
+  literal.  All winners reproduce their assets byte-for-byte.
+
 ## What each phase must add before completion
 
-- H, I: implemented above.
-- J: exact structural reuse / fingerprints (duplicate patches, affine and
-  symmetry factoring, seeded-field search).
+- H, I, J: implemented above.
 - K–M: SIMD / Rayon / CUDA batched inverse search.
 - N: hierarchical residual factorization + DSFB zero-authority governor.
 - O: 100+ asset public corpus with per-asset license/hash manifest, split

@@ -80,6 +80,15 @@
       "receipts": [
         "phase-i-inverse-scalar-2f03ffb941537f32.json"
       ]
+    },
+    {
+      "id": "vole-gfx.phase-j.structural-reuse",
+      "status": "demonstrated",
+      "statement": "Structural reuse detectors extract a dominant field color, label 4-connected foreground components, group byte-equal content classes, and emit composite explanations: sprite-on-field (524 B persistent, zero residual) and sprite-repeat with the crop stored once (570 B for 2 copies, 616 B for 3, vs ~12 KB literal on the phase-j court), with every winner reproducing its asset byte-for-byte; the noise negative control falls back to literal. Composite (multi-object) proposals extend the Phase I Pareto pipeline unchanged.",
+      "domain": "vole.gfx.u1 exact profile, scalar CPU, this host+commit; see receipt phase-j-*",
+      "receipts": [
+        "phase-j-structural-reuse-7985936f6748b6bc.json"
+      ]
     }
   ]
 }

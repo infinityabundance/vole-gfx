@@ -61,10 +61,13 @@ machine-readable version. In short, implemented, tested and receipted:
 - Phase I: the scalar inverse procedural compiler — bounded detectors
   (constant, periodic, palette-band, tiled, gradient, bilinear), exact
   residual closure, deterministic Pareto frontiers with the literal raster
-  as the always-present fallback (negative controls fall back honestly).
+  as the always-present fallback (negative controls fall back honestly);
+- Phase J: structural reuse — field-color fingerprinting, connected-
+  component sprite extraction and shared-object `sprite-repeat`
+  explanations (composite multi-object candidates on the same frontier).
 
-Pending: structural/affine factoring and SIMD/Rayon/CUDA inverse search
-(J–N), the public corpus (O), the runtime courts (P–R), and the remaining
+Pending: SIMD/Rayon/CUDA inverse search and residual factoring (K–N), the
+public corpus (O), the runtime courts (P–R), and the remaining
 hardware-dependent phases (S–X).
 
 ## Quick start

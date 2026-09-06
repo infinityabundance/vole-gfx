@@ -1,8 +1,9 @@
 # Inverse compiler ("unbaking")
 
 `A -> (Γ, s, θ, R)`: explain a baked raster asset as bounded procedural state
-plus an explicit residual.  Status: **Phase I implemented (scalar
-detectors + Pareto + literal fallback)**; Phases J–N pending.
+plus an explicit residual.  Status: **Phase I implemented (scalar detectors +
+Pareto + literal fallback); Phase J implemented (structural reuse/sprite
+extraction/composite proposals)**; Phases K–N pending.
 
 ## What Phase I implements (`src/inverse/`)
 
@@ -36,18 +37,19 @@ detectors + Pareto + literal fallback)**; Phases J–N pending.
 ## Search order (paper §19)
 
 Phase I covers steps 1, 3 (bands), 5 (periodicity), 6 (analytic), 9 (residual
-decomposition), 10 (fallback) of the planned hierarchy:
+decomposition), 10 (fallback); Phase J adds step 2 (structural reuse) and the
+first affine/translation reuse of step 4:
 
 ```
 source characterization        (in progress: format/extent/color counts)
   +-- palette/index discovery          palette-band-x/y  [I]
-  +-- translation/repetition           tiled (wrap periods) [I]
+  +-- exact structural reuse           component crops, content classes [J]
+  +-- translation/repetition           shared-object sprite-repeat [J]
   +-- symmetry / periodicity           2-color stripes/checker [I]
   +-- simple analytic families         constant, ramps, bilinear [I]
   +-- residual decomposition           sparse-overwrite closure [I]
   +-- literal/original fallback        always present [I]
-exact structural reuse (patch/span hashing)   -> J
-affine reuse / symmetry / seeded-field search -> J
+seeded-field search / deeper symmetry -> K–N
 compound/hierarchical factorization           -> N
 SIMD / Rayon / CUDA batched search            -> K–M
 DSFB governor (zero authority)                -> N
