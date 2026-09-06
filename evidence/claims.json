@@ -41,7 +41,9 @@
       "status": "demonstrated",
       "statement": "AVX-512 simple path reproduces the same bytes; on this court it measured ~144us vs ~130us AVX2 \u2014 AVX-512 loses on this memory-bound workload (retained as negative evidence; no assumed 512>256 win).",
       "domain": "vole.gfx.u1 exact profile, eligible subset, this host+commit; see receipt cpu-backend-matrix (phase e)",
-      "receipts": []
+      "receipts": [
+        "cpu-backend-matrix-b62343ef29920926.json"
+      ]
     },
     {
       "id": "vole-gfx.phase-f.rayon",
