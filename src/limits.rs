@@ -140,6 +140,7 @@ pub enum Reject {
     ResidualRegionInvalid,
     UnsupportedProfile,
     UnsupportedColor,
+    ExecutionBudgetExceeded,
 }
 
 impl Reject {
@@ -169,6 +170,7 @@ impl Reject {
             Reject::ResidualRegionInvalid => "residual-region-invalid",
             Reject::UnsupportedProfile => "unsupported-profile",
             Reject::UnsupportedColor => "unsupported-color",
+            Reject::ExecutionBudgetExceeded => "execution-budget-exceeded",
         }
     }
 }

@@ -8,6 +8,15 @@
       "receipts": [
         "phase-a-exact-u1-scalar-2f61a3792c787538.json"
       ]
+    },
+    {
+      "id": "vole-gfx.phase-b.conformance-vectors",
+      "status": "demonstrated",
+      "statement": "12 pinned conformance vectors (fills, layered/indexed sprites, palette animation, trajectories at 0/16.6/33.3ms and irregular times, move+fill, sparse-overwrite and XOR residual closure incl. Gray8 format-skip) reproduce their scalar-oracle SHA-256 exactly; adversarial fuzz (truncations, bit flips, random bytes, deep copy stacks) never panics and fails closed.",
+      "domain": "vole.gfx.u1 exact profile, scalar backend, CPU, this commit; see receipt phase-b-*",
+      "receipts": [
+        "phase-b-conformance-residual-8e0fb708711472d5.json"
+      ]
     }
   ]
 }

@@ -22,6 +22,11 @@ use crate::state::{PlacedInstance, Scene, StructOp};
 /// Depth bound for copy/move prefix chains (hard, adversarial-safe).
 const COPY_CHAIN_LIMIT: u32 = 256;
 
+/// Per-sample bound on fold-frame evaluations (copy/move prefix resolutions).
+/// Stops pathological self-covering copy stacks with a deterministic error
+/// instead of exponential work.
+const FOLD_FRAME_BUDGET: u32 = 1 << 16;
+
 /// Deterministic accounting counters emitted with every materialization.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Counters {
@@ -64,15 +69,61 @@ pub fn materialize_scene(
     req.validate()?;
     debug_assert_eq!(req.view, crate::observation::View::identity());
     let b = req.domain.bounds();
+    let mut counters = Counters {
+        samples: 0,
+        ..Default::default()
+    };
+
+    if let crate::observation::Domain::IrregularSamples(pts) = &req.domain {
+        // Output is one packed sample per requested point, in request
+        // order.  Residual closure is applied per sample point.
+        let n = pts.len();
+        if n == 0 {
+            return Err(Reject::Degenerate);
+        }
+        let mut out = Output::new(n as u32, 1, req.format)?;
+        for (k, &(x, y)) in pts.iter().enumerate() {
+            let rgba = compose_pixel(scene, x, y, &mut counters)?;
+            let code = encode_code(rgba, req.format);
+            let off = k * req.format.bytes_per_sample();
+            write_code(&mut out.data, off, code);
+            counters.samples += 1;
+            for op in &scene.ops {
+                if let StructOp::BindResidual {
+                    algebra,
+                    region,
+                    format,
+                    payload,
+                } = op
+                {
+                    if *format != req.format {
+                        counters.residual_format_skips += 1;
+                        continue;
+                    }
+                    apply_residual_at(
+                        *algebra,
+                        region,
+                        req.format,
+                        payload,
+                        x,
+                        y,
+                        &mut out.data[off..off + req.format.bytes_per_sample()],
+                        &mut counters,
+                    )?;
+                }
+            }
+        }
+        return Ok(Materialized {
+            output: out,
+            counters,
+        });
+    }
+
     let (w, h) = (b.width() as u32, b.height() as u32);
     if w == 0 || h == 0 {
         return Err(Reject::Degenerate);
     }
     let mut out = Output::new(w, h, req.format)?;
-    let mut counters = Counters {
-        samples: 0,
-        ..Default::default()
-    };
 
     // Composition per sample.
     for j in 0..h {
@@ -134,7 +185,8 @@ pub fn materialize_pixel(scene: &Scene<'_>, x: i32, y: i32) -> Result<(Rgba, Cou
 /// Compose the full RGBA value at a pixel (scene coordinates).
 fn compose_pixel(scene: &Scene<'_>, x: i32, y: i32, c: &mut Counters) -> Result<Rgba, Reject> {
     let cx = Vec2::sample_center(x, y);
-    fold_ops(scene, cx, scene.ops.len(), 0, c)
+    let mut budget = FOLD_FRAME_BUDGET;
+    fold_ops(scene, cx, scene.ops.len(), 0, &mut budget, c)
 }
 
 /// Value of the instance-composed surface at scene point `cx` (before any
@@ -157,16 +209,21 @@ fn draw_base(scene: &Scene<'_>, cx: Vec2, depth: u32, c: &mut Counters) -> Resul
 
 /// Evaluate structural ops `0..upto` at scene point `cx`, seeded with the
 /// instance-composed base.  Copy/move recurse into the prefix surface.
+/// `budget` bounds total fold frames per sample (bounded execution).
 fn fold_ops(
     scene: &Scene<'_>,
     cx: Vec2,
     upto: usize,
     depth: u32,
+    budget: &mut u32,
     c: &mut Counters,
 ) -> Result<Rgba, Reject> {
     if depth > COPY_CHAIN_LIMIT {
         return Err(Reject::DependencyTooDeep);
     }
+    *budget = budget
+        .checked_sub(1)
+        .ok_or(Reject::ExecutionBudgetExceeded)?;
     let mut cur = draw_base(scene, cx, depth, c)?;
     for (k, op) in scene.ops[..upto].iter().enumerate() {
         match op {
@@ -180,14 +237,14 @@ fn fold_ops(
                 if covers_shifted(cx, src, *dx, *dy) {
                     // destination pixel: copy from prefix surface at (cx - d)
                     let from = cx - Vec2::new(*dx, *dy);
-                    cur = fold_ops(scene, from, k, depth + 1, c)?;
+                    cur = fold_ops(scene, from, k, depth + 1, budget, c)?;
                     c.ops_applied += 1;
                 }
             }
             StructOp::MoveRegion { src, dx, dy } => {
                 if covers_shifted(cx, src, *dx, *dy) {
                     let from = cx - Vec2::new(*dx, *dy);
-                    cur = fold_ops(scene, from, k, depth + 1, c)?;
+                    cur = fold_ops(scene, from, k, depth + 1, budget, c)?;
                     c.ops_applied += 1;
                 } else if covers(cx, src) {
                     // Source region of a move is cleared: structural ops mutate
@@ -392,21 +449,68 @@ fn apply_residual(
             continue;
         }
         let o = ((y - dy0) as usize * w as usize + (x - dx0) as usize) * bps;
-        match algebra {
-            crate::residual::algebra::SPARSE_OVERWRITE => {
-                dst[o..o + bps].copy_from_slice(val);
-            }
-            crate::residual::algebra::XOR => {
-                for k in 0..bps {
-                    dst[o + k] ^= val[k];
-                }
-            }
-            _ => return Err(Reject::UnknownTag),
-        }
-        c.residual_records += 1;
+        apply_record(algebra, &mut dst[o..o + bps], val, c);
     }
     if !r.done() {
         return Err(Reject::PayloadMismatch);
     }
     Ok(())
+}
+
+/// Apply one residual binding to a single sample slot `(x, y)` (used by the
+/// irregular-sample path).  The record scan is linear; fine for the scalar
+/// oracle.
+#[allow(clippy::too_many_arguments)]
+fn apply_residual_at(
+    algebra: u8,
+    region: &IRect,
+    format: ColorFormat,
+    payload: &[u8],
+    x: i32,
+    y: i32,
+    slot: &mut [u8],
+    c: &mut Counters,
+) -> Result<(), Reject> {
+    let bps = format.bytes_per_sample();
+    let mut r = crate::ir::wire::Reader::new(payload);
+    let count = r.u64().map_err(|_| Reject::Truncated)?;
+    if count > crate::limits::MAX_RESIDUAL_RECORDS {
+        return Err(Reject::CountExceedsLimit);
+    }
+    let (bx0, by0, bx1, by1) = (
+        region.x0 as i64,
+        region.y0 as i64,
+        region.x1 as i64,
+        region.y1 as i64,
+    );
+    for _ in 0..count {
+        let rx = r.u32().map_err(|_| Reject::Truncated)?;
+        let ry = r.u32().map_err(|_| Reject::Truncated)?;
+        let val = r.bytes(bps).map_err(|_| Reject::Truncated)?;
+        let (rx, ry) = (rx as i64, ry as i64);
+        if rx < bx0 || rx >= bx1 || ry < by0 || ry >= by1 {
+            continue;
+        }
+        if rx == x as i64 && ry == y as i64 {
+            apply_record(algebra, slot, val, c);
+        }
+    }
+    if !r.done() {
+        return Err(Reject::PayloadMismatch);
+    }
+    Ok(())
+}
+
+#[inline]
+fn apply_record(algebra: u8, slot: &mut [u8], val: &[u8], c: &mut Counters) {
+    match algebra {
+        crate::residual::algebra::SPARSE_OVERWRITE => slot.copy_from_slice(val),
+        crate::residual::algebra::XOR => {
+            for k in 0..slot.len() {
+                slot[k] ^= val[k];
+            }
+        }
+        _ => unreachable!("validated algebra"),
+    }
+    c.residual_records += 1;
 }

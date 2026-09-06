@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "run_id": "phase-b-conformance-residual-8e0fb708711472d5",
+  "timestamp_unix_ms": 1788729297587,
+  "git_commit": "f49d064905941ff4473d64248d251970b443abc5",
+  "git_dirty": true,
+  "command": "target/release/examples/phase_b_gate",
+  "court": "phase-b-conformance-residual",
+  "universe": "vole.gfx.u1",
+  "profile": "exact-u1",
+  "backend": "scalar",
+  "exact": true,
+  "inputs": {},
+  "outputs": {
+    "v1": "6a10325504993ff5de852ee50df37ca4052e4620a4a8901f2cc8f2c05bec7ca8",
+    "v2_after": "ac872d6a9f6ed36248cf4278d4288a529d45c38c74149df6dff52672440140d7",
+    "v2_before": "3a4410accd1129ecbd8e3a3898938afbe7b95dc7d81b2aa2934e02309fdfe3f5",
+    "v3_irregular": "2699863c031949c9045773d72b1efc7244bf561445816390a418890ad0999474",
+    "v4": "042efdd78dc067953634cf01590d37a3d9fd3dc6ed12e8f71e7c40123a1b82ec",
+    "v5": "d9593d5eb769c41d9d51866d7c699177857ab1fe34c373ad02da9c1315443daf"
+  },
+  "canonical_hash": "d9593d5eb769c41d9d51866d7c699177857ab1fe34c373ad02da9c1315443daf",
+  "reference_hash": null,
+  "metrics": {},
+  "quality_metric": null,
+  "quality_value": null,
+  "persistent_bytes": 0,
+  "residual_bytes": 0,
+  "samples_requested": 0,
+  "samples_evaluated": 0,
+  "pass": true,
+  "unsupported_reason": null,
+  "notes": [
+    "12 pinned conformance vectors (RGBA8+Gray8, palette animation, trajectories at irregular times, move/fill, residual closure) all reproduce; residual records clip to the request domain; format-mismatch bindings skipped and counted"
+  ],
+  "environment": {
+    "cpu": {
+      "vendor_model": ": AMD Ryzen 7 9800X3D 8-Core Processor",
+      "cores": 16,
+      "avx2": true,
+      "avx512_subfeatures": [
+        "avx512f",
+        "avx512dq",
+        "avx512ifma",
+        "avx512cd",
+        "avx512bw",
+        "avx512vl",
+        "avx512_bf16",
+        "avx512vbmi",
+        "avx512_vbmi2",
+        "avx512_vnni",
+        "avx512_bitalg",
+        "avx512_vpopcntdq",
+        "avx512_vp2intersect"
+      ]
+    },
+    "gpu": {
+      "present": true,
+      "name": "NVIDIA GeForce RTX 4080 SUPER",
+      "driver": "610.57.04",
+      "cuda_umd": "NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  610.57.04  Release Build  (root@vanir)"
+    },
+    "compiler": {
+      "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8",
+      "rustc_version": "1.98.0",
+      "llvm": "22.1.8",
+      "profile": null,
+      "target_cpu": null
+    },
+    "system": {
+      "os": "linux",
+      "kernel": "7.2.2-1-cachyos"
+    },
+    "git_commit": "f49d064905941ff4473d64248d251970b443abc5",
+    "git_dirty": true
+  },
+  "receipt_hash": "b4d0f7abe386c01d59718e54f5df02bdc2103203ac43b5c09fea55d8d0709206"
+}
