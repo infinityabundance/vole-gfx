@@ -57,10 +57,15 @@ machine-readable version. In short, implemented, tested and receipted:
 - Phase H: seeded procedural generator objects — ten bounded families
   (`Γ(U, s, θ)`) with canonical params, cost estimators and exact
   deterministic evaluation; materialization evaluates only requested
-  samples (direct seeded evaluation, no re-baking).
+  samples (direct seeded evaluation, no re-baking);
+- Phase I: the scalar inverse procedural compiler — bounded detectors
+  (constant, periodic, palette-band, tiled, gradient, bilinear), exact
+  residual closure, deterministic Pareto frontiers with the literal raster
+  as the always-present fallback (negative controls fall back honestly).
 
-Pending: the inverse procedural compiler (I–N), the public corpus (O), the
-runtime courts (P–R), and the remaining hardware-dependent phases (S–X).
+Pending: structural/affine factoring and SIMD/Rayon/CUDA inverse search
+(J–N), the public corpus (O), the runtime courts (P–R), and the remaining
+hardware-dependent phases (S–X).
 
 ## Quick start
 

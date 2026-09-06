@@ -71,6 +71,15 @@
       "receipts": [
         "phase-h-procedural-fields-2d2bdd1e5b76f714.json"
       ]
+    },
+    {
+      "id": "vole-gfx.phase-i.inverse-scalar",
+      "status": "demonstrated",
+      "statement": "The scalar inverse compiler unbakes raster assets into Pareto frontiers of exact explanations (detectors: constant, 2-color periodic stripes/checker, palette-band cycles, tiled wrap periods, gradient ramps, bilinear corner fit, literal fallback). On the seven-class phase-i court the byte-min profile recovers constant/checker/palette-bands/tiled/bilinear at ~140-170 persistent bytes with zero residual (vs ~literal KBs), the hash-noise negative control falls back to literal, and every winner materializes its asset byte-for-byte (closure gate). Frontiers are deterministic: the four cost axes (persistent bytes, residual bytes, host-independent materialization-work model, search work) exclude measured wall-clock from dominance.",
+      "domain": "vole.gfx.u1 exact profile, scalar CPU, this host+commit; see receipt phase-i-*",
+      "receipts": [
+        "phase-i-inverse-scalar-2f03ffb941537f32.json"
+      ]
     }
   ]
 }

@@ -24,7 +24,8 @@ Cargo package (`vole-gfx`); no workspace, no subcrates.
 | F | Rayon + SIMD | implemented | cpu-backend-matrix (f) |
 | G | Rust CUDA PTX device + host | implemented (byte-kernel parity) | phase-g |
 | H | Procedural state, generators, trajectories | implemented | phase-h |
-| I–N | Inverse compiler (scalar/SIMD/Rayon/CUDA, DSFB) | pending | – |
+| I | Inverse procedural asset compiler — scalar | implemented | phase-i |
+| J–N | Structural reuse; SIMD/Rayon/CUDA search; DSFB | pending | – |
 | O | Corpus (100+ assets) + negative controls | pending | – |
 | P–R | No-rebake / observation / partial courts | pending | – |
 | S–T | CUDA↔Vulkan, direct display | unsupported (hardware gate) | – |
@@ -129,30 +130,56 @@ Cargo package (`vole-gfx`); no workspace, no subcrates.
   scalar/blocked/rayon/auto for full/region/tile/band/irregular domains;
   adversarial param blobs fail closed at decode and validation.
 
-## Explicit non-claims (as of Phase H)
+## Explicit non-claims (as of Phase I)
 
-No claim of inverse compilation or unbaking (Phases I–N pending). No claim
-that any generator "explains" pixels. No claim that generator fields beat
-raster storage (the no-mandatory-re-baking court is Phase P). No CUDA
-claim for generators: generator evaluation is CPU-only in Phase H (device
-kernels for fields are future work; byte-kernel parity is the only CUDA
-claim). Only the CONSTANT family participates in the SIMD fill fast path in
-Phase H; other families run exact scalar/blocked evaluation (acceleration of
-their row generation is a measured follow-up). Palette fields embed their
+No claim of inverse compilation beyond the receipted scalar detector set
+(Phases J–N pending: structural reuse, affine/symmetry factoring, seeded-
+field search, SIMD/Rayon/CUDA search, recursive factorization, DSFB). No
+claim that any detector recovers an author's semantics. No claim that a
+detected explanation is optimal over unseen families — the frontier is over
+the *evaluated* candidate set, and the literal fallback bounds the loss. No
+claim that any generator "explains" pixels outside byte-exact reconstruction
+with counted state. No claim of procedural *computing* from storage savings
+(no-rebake court is Phase P). No CUDA claim for generators or inverse search
+(CPU-only through I; byte-kernel parity is the only CUDA claim). Only the
+CONSTANT family participates in the SIMD fill fast path in Phase H; other
+families run exact scalar/blocked evaluation. Palette fields embed their
 palette in the params and are not animatable by timeline `PaletteSet` ops in
 this phase. No claim that CUDA beats CPU or vice versa beyond the exact
 receipted domains. No claim that AVX-512 is faster than AVX2 — the retained
-phase-e measurement says the opposite on this court. No direct-display claim (Phases S–T unsupported pending
-hardware path verification). CUDA equality is claimed only on hosts with a
-genuine NVIDIA device; elsewhere it is `not evaluated on this host`.
+phase-e measurement says the opposite on this court. No direct-display claim
+(Phases S–T unsupported pending hardware path verification). CUDA equality
+is claimed only on hosts with a genuine NVIDIA device; elsewhere it is `not
+evaluated on this host`.
+
+## What Phase I added (scalar inverse compiler)
+
+- **Assets** (`inverse::asset::Asset`): flat raster inputs in their own code
+  space (gray/RGBA), hostile-safe.
+- **Detectors** (`inverse::detect`): constant, 2-color periodic stripes and
+  checker, palette-band (equal-width run cycles), tiled (minimal wrap
+  period), horizontal/vertical ramps, bilinear corner fit, and the always-
+  present literal fallback.  Proposals are measured, not trusted: each is
+  materialized and diffed against the asset into a canonical sparse-overwrite
+  residual with a byte-exact closure gate.
+- **Pareto-first selection** (`inverse::frontier`): non-dominated candidates
+  over four deterministic axes (persistent bytes, residual bytes,
+  host-independent materialization-work model, search work); wall-clock
+  latency is receipted but never decides dominance, so frontiers are
+  reproducible.  `min_total_bytes` is the default profile.
+- **Evidence**: the phase-i gate unbakes seven asset classes (constant /
+  checker / palette-bands / tiled / gradient ramp / bilinear / hash-noise
+  negative control): exact families win at ~140–170 B persistent with zero
+  residual where detected, the noise control falls back to literal, and all
+  winners reproduce their assets byte-for-byte.
 
 ## What each phase must add before completion
 
-- H: implemented above (procedural state, ten generator families, exact
-  evaluation, direct seeded observation evidence).
-- I–N: the inverse procedural compiler ("unbaking") with structural reuse,
-  Pareto accounting, residual-guided factorization, SIMD/Rayon/CUDA search
-  acceleration, and the DSFB governor with zero authority over correctness.
+- H, I: implemented above.
+- J: exact structural reuse / fingerprints (duplicate patches, affine and
+  symmetry factoring, seeded-field search).
+- K–M: SIMD / Rayon / CUDA batched inverse search.
+- N: hierarchical residual factorization + DSFB zero-authority governor.
 - O: 100+ asset public corpus with per-asset license/hash manifest, split
   TRAIN/VALIDATION/TEST, negative controls.
 - P–R: no-mandatory-re-baking runtime court, arbitrary-observation-time

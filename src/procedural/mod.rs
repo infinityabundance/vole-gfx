@@ -193,6 +193,20 @@ pub mod build {
         )
     }
 
+    pub fn stripe_y(w: u32, h: u32, py: u32, c0: Rgba, c1: Rgba) -> Object {
+        field_object(
+            w,
+            h,
+            &super::Field::Periodic(periodic::Params {
+                mode: periodic::MODE_STRIPE_Y,
+                px: 1,
+                py,
+                c0,
+                c1,
+            }),
+        )
+    }
+
     pub fn checker(w: u32, h: u32, px: u32, py: u32, c0: Rgba, c1: Rgba) -> Object {
         field_object(
             w,
