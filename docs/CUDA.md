@@ -1,6 +1,6 @@
 # CUDA
 
-Status: **pending** (Phase G onward). Device code will be written in Rust and
+Status: **implemented (byte-kernel parity)**; full primitive parity ongoing. Build: `scripts/ptx_shim.rs` compiled with the pinned nightly (`-Z ub-checks=no -C overflow-checks=no`, `extern "ptx-kernel"` for `.entry` emission); host driver calls via the minimal `cuda::host` binding (feature `cuda`). Device code will be written in Rust and
 compiled to PTX with the `nvptx64-nvidia-cuda` Tier-2 target
 (`--no-default-features --features cuda-device -Zbuild-std=core`,
 `--crate-type=cdylib`), pinned to a nightly; host interaction is feature-gated

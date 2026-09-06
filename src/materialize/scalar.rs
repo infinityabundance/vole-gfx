@@ -284,9 +284,9 @@ fn sample_instance(scene: &Scene<'_>, inst: &PlacedInstance<'_>, cx: Vec2) -> Op
             && (cx.x as i64) < (clip.x1 as i64)
             && (cx.y as i64) >= (clip.y0 as i64)
             && (cx.y as i64) < (clip.y1 as i64))
-        {
-            return None;
-        }
+    {
+        return None;
+    }
     // Fast conservative reject: sample pixel outside the transformed extent.
     if let Some(b) = inst.bounds_px {
         let px = (cx.x >> 16, cx.y >> 16);

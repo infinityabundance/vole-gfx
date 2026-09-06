@@ -53,6 +53,15 @@
       "receipts": [
         "cpu-backend-matrix-f78c2b793577e3d2.json"
       ]
+    },
+    {
+      "id": "vole-gfx.phase-g.rust-cuda-ptx",
+      "status": "demonstrated",
+      "statement": "Rust device code (extern ptx-kernel) compiles to launchable PTX (.visible .entry vgf_fill_u8/vgf_copy_u8, sm_89) via the pinned nightly nvptx64-nvidia-cuda target with no CUDA C++; the PTX loads through the CUDA driver and both kernels produce output byte-identical to the CPU reference on the RTX 4080 SUPER of this host.",
+      "domain": "vole.gfx.u1 byte kernels, nightly-2026-07-24, sm_89, this host+commit; see receipt phase-g-*",
+      "receipts": [
+        "phase-g-ptx-cuda-parity-9a37500cbfd78360.json"
+      ]
     }
   ]
 }

@@ -56,13 +56,6 @@ pub mod state;
 #[cfg(not(feature = "cuda-device"))]
 pub mod universe;
 
-// Device-capable submodule tree (selected pieces compile to PTX).
-#[cfg(feature = "cuda-device")]
-pub mod device_only {
-    //! Everything the PTX build needs lives here (see `cuda/device.rs`).
-}
-
-#[cfg(not(feature = "cuda-device"))]
 pub mod cuda;
 #[cfg(not(feature = "cuda-device"))]
 pub mod direct;

@@ -205,9 +205,10 @@ fn run(cli: Cli) -> i32 {
                             h,
                             fmt,
                             &m.output.data,
-                        ) {
-                            return fail("materialize", e, json);
-                        }
+                        )
+                    {
+                        return fail("materialize", e, json);
+                    }
                     let data = serde_json::json!({
                         "file": file,
                         "time_ns": t,

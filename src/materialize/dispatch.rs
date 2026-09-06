@@ -46,13 +46,15 @@ pub fn materialize_auto(
     #[cfg(target_arch = "x86_64")]
     {
         if avx512::has_avx512()
-            && let Some(m) = avx512::materialize_simple(scene, req, shape)? {
-                return Ok((m, Path::Avx512));
-            }
+            && let Some(m) = avx512::materialize_simple(scene, req, shape)?
+        {
+            return Ok((m, Path::Avx512));
+        }
         if avx2::has_avx2()
-            && let Some(m) = avx2::materialize_simple(scene, req, shape)? {
-                return Ok((m, Path::Avx2));
-            }
+            && let Some(m) = avx2::materialize_simple(scene, req, shape)?
+        {
+            return Ok((m, Path::Avx2));
+        }
     }
     let mut bm =
         super::blocked::BlockMaterializer::new(scene, crate::state::index::DEFAULT_CELL_PX);

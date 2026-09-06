@@ -322,9 +322,10 @@ impl<'a> BlockMaterializer<'a> {
             c.instance_tests += 1;
             let inst = &scene.instances[inst_i as usize];
             if let Some(b) = inst.bounds_px
-                && !b.contains_px(px, py) {
-                    continue;
-                }
+                && !b.contains_px(px, py)
+            {
+                continue;
+            }
             draws += 1;
             let Some(local) = sample_placed(scene, inst, cx) else {
                 continue;
@@ -405,9 +406,9 @@ fn sample_placed(
             && (cx.x as i64) < (clip.x1 as i64)
             && (cx.y as i64) >= (clip.y0 as i64)
             && (cx.y as i64) < (clip.y1 as i64))
-        {
-            return None;
-        }
+    {
+        return None;
+    }
     let aff = inst.affine();
     let (lx, ly) = super::scalar::inv_sample_pub(&aff, cx)?;
     let obj = inst.object();

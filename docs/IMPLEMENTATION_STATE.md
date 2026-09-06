@@ -21,7 +21,7 @@ was initialized during Phase A.
 | C | Blocking + dependency indexing | implemented | phase-c |
 | D/E | AVX2 / AVX-512 backends | implemented | phase-d/e |
 | F | Rayon + SIMD | implemented | phase-f |
-| G | Rust CUDA PTX device + host | pending | – |
+| G | Rust CUDA PTX device + host | implemented (byte-kernel parity) | phase-g |
 | H | Procedural state, generators, trajectories | pending | – |
 | I–N | Inverse compiler (scalar/SIMD/Rayon/CUDA, DSFB) | pending | – |
 | O | Corpus (100+ assets) + negative controls | pending | – |

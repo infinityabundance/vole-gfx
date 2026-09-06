@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "run_id": "phase-g-ptx-cuda-parity-2bc5815cd47d3458",
+  "timestamp_unix_ms": 1788730841349,
+  "git_commit": "abccce0a6f5a380ec9b012714eb8cb563949e4ca",
+  "git_dirty": true,
+  "command": "target/release/examples/phase_g_gate",
+  "court": "phase-g-ptx-cuda-parity",
+  "universe": "vole.gfx.u1",
+  "profile": "exact-u1",
+  "backend": "cuda",
+  "exact": true,
+  "inputs": {},
+  "outputs": {
+    "gpu": "NVIDIA GeForce RTX 4080 SUPER"
+  },
+  "canonical_hash": null,
+  "reference_hash": null,
+  "metrics": {},
+  "quality_metric": null,
+  "quality_value": null,
+  "persistent_bytes": 0,
+  "residual_bytes": 0,
+  "samples_requested": 0,
+  "samples_evaluated": 0,
+  "pass": false,
+  "unsupported_reason": "CUDA driver/module load failed: cuModuleLoadDataEx error 218",
+  "notes": [],
+  "environment": {
+    "cpu": {
+      "vendor_model": ": AMD Ryzen 7 9800X3D 8-Core Processor",
+      "cores": 16,
+      "avx2": true,
+      "avx512_subfeatures": [
+        "avx512f",
+        "avx512dq",
+        "avx512ifma",
+        "avx512cd",
+        "avx512bw",
+        "avx512vl",
+        "avx512_bf16",
+        "avx512vbmi",
+        "avx512_vbmi2",
+        "avx512_vnni",
+        "avx512_bitalg",
+        "avx512_vpopcntdq",
+        "avx512_vp2intersect"
+      ]
+    },
+    "gpu": {
+      "present": true,
+      "name": "NVIDIA GeForce RTX 4080 SUPER",
+      "driver": "610.57.04",
+      "cuda_umd": "NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  610.57.04  Release Build  (root@vanir)"
+    },
+    "compiler": {
+      "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8",
+      "rustc_version": "1.98.0",
+      "llvm": "22.1.8",
+      "profile": null,
+      "target_cpu": null
+    },
+    "system": {
+      "os": "linux",
+      "kernel": "7.2.2-1-cachyos"
+    },
+    "git_commit": "abccce0a6f5a380ec9b012714eb8cb563949e4ca",
+    "git_dirty": true
+  },
+  "receipt_hash": "94af5c0e2db8b5dbba88e98bef73eaaa0966a39cf92c44686d1fc30a4c5722a3"
+}

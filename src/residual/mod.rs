@@ -63,9 +63,10 @@ pub fn validate_payload(
         let _val = r.bytes(b).map_err(|_| Reject::Truncated)?;
         // canonical sorted order (y asc, then x asc, strictly)
         if let Some(py) = prev_y
-            && (y < py || (y == py && x <= prev_x)) {
-                return Err(Reject::NonCanonicalOrder);
-            }
+            && (y < py || (y == py && x <= prev_x))
+        {
+            return Err(Reject::NonCanonicalOrder);
+        }
         prev_y = Some(y);
         prev_x = x;
         // in-region check
