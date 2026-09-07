@@ -65,8 +65,15 @@ machine-readable version. In short, implemented, tested and receipted:
 - Phase J: structural reuse — field-color fingerprinting, connected-
   component sprite extraction and shared-object `sprite-repeat`
   explanations (composite multi-object candidates on the same frontier).
+- Phase K: seeded-field inverse search — the deterministic gray-noise
+  family is now unbaked by a bounded seed sweep (scalar oracle + AVX2
+  `vpmuludq`-emulated and AVX-512 `vpmullq` batched kernels with identical
+  accepted seed sets, measured on the phase-k gate: AVX-512 ~0.75 ms vs
+  AVX2 ~1.9 ms vs scalar ~1.2 ms for a 2²⁰-seed sweep, so auto dispatch
+  prefers AVX-512 for search).  Negative controls are SHA-256 random bytes
+  (no U1 family produces them) and fall back honestly.
 
-Pending: SIMD/Rayon/CUDA inverse search and residual factoring (K–N), the
+Pending: Rayon/CUDA inverse search and residual factoring (L–N), the
 public corpus (O), the runtime courts (P–R), and the remaining
 hardware-dependent phases (S–X).
 

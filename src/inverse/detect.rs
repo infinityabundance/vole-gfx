@@ -58,6 +58,7 @@ pub fn propose(asset: &Asset) -> Vec<Proposal> {
     tiled(asset, &mut out);
     gradients(asset, &mut out);
     super::structure::propose(asset, &mut out); // Phase J structural reuse
+    super::search::propose_seeded_field(asset, &mut out); // Phase K seed sweep
     out
 }
 

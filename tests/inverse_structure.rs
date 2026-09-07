@@ -158,19 +158,33 @@ fn gray_sprite_on_field() {
     assert_all_survivors_exact(&a, &f);
 }
 
-/// Noise field raster (negative control input).
+/// Random-bytes raster (negative control input): deterministic SHA-256-
+/// derived pseudo-random RGBA bytes that no U1 generator family produces.
 fn noise_asset() -> Asset {
+    let mut data = Vec::new();
+    for j in 0..24u32 {
+        for i in 0..24u32 {
+            let c =
+                vole_gfx::hash::sha256(&[0x3c, (i >> 8) as u8, i as u8, (j >> 8) as u8, j as u8]);
+            data.extend_from_slice(&c.0[..4]);
+        }
+    }
     let mut d = Document::new();
-    d.objects.push(build::noise_field(24, 24, 99));
+    d.objects.push(Object::Raster {
+        format: ColorFormat::Rgba8,
+        w: 24,
+        h: 24,
+        data,
+    });
     d.instances.push(placed(0, 1, 0, 0, 0));
     rasterize_doc(&d, 24, 24)
 }
 
-/// Negative control: no uniform field exists; the byte-min profile must stay
-/// with the literal fallback and no structural candidate may carry a tiny
-/// residual.
+/// Negative control: no uniform field or seeded explanation exists; the
+/// byte-min profile must stay with the literal fallback and no structural
+/// candidate may carry a tiny residual.
 #[test]
-fn non_structural_noise_falls_back() {
+fn non_structural_random_noise_falls_back() {
     let a = noise_asset();
     let (f, best) = inverse::unbake_best(&a).unwrap();
     assert_eq!(best.name, "literal");

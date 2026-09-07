@@ -402,14 +402,20 @@ impl Mul for Affine {
     }
 }
 
+/// SplitMix64 finalizer constants (single source for the scalar `hash64` and
+/// the SIMD lane kernels of the inverse search, which must be bit-identical).
+pub const HASH64_ADD: u64 = 0x9E37_79B9_7F4A_7C15;
+pub const HASH64_M1: u64 = 0xBF58_476D_1CE4_E5B9;
+pub const HASH64_M2: u64 = 0x94D0_49BB_1331_11EB;
+
 /// A deterministic 64-bit integer hash (SplitMix64 finalizer).  Used for
 /// structural fingerprints and in-memory hashing only — never for content
 /// identity (which is SHA-256, see `crate::hash`).
 #[inline(always)]
 pub fn hash64(mut x: u64) -> u64 {
-    x = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
-    x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    x = x.wrapping_add(HASH64_ADD);
+    x = (x ^ (x >> 30)).wrapping_mul(HASH64_M1);
+    x = (x ^ (x >> 27)).wrapping_mul(HASH64_M2);
     x ^ (x >> 31)
 }
 

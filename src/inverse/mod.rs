@@ -23,6 +23,7 @@ pub mod asset;
 pub mod candidate;
 pub mod detect;
 pub mod frontier;
+pub mod search;
 pub mod structure;
 pub mod work;
 

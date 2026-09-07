@@ -1,7 +1,8 @@
 //! Phase I gate: the scalar inverse procedural compiler ("unbaking").
 //!
 //! Unbakes a court of assets (built from our own generator families, plus
-//! noise as a negative control) into Pareto frontiers of exact explanations:
+//! SHA-256 pseudo-random bytes as a negative control) into Pareto frontiers
+//! of exact explanations:
 //!
 //! ```text
 //! A -> (Gamma, s, theta, R)      per surviving candidate
@@ -37,6 +38,27 @@ fn rasterize(object: &Object) -> Asset {
     let req = ObservationRequest::full_surface(0, w, h, ColorFormat::Rgba8);
     let m = materialize_document(&d, &req).unwrap();
     Asset::new(w, h, ColorFormat::Rgba8, m.output.data).unwrap()
+}
+
+/// Deterministic SHA-256-derived pseudo-random RGBA raster, canonicalized
+/// through the materializer (a real baked asset is a materializer output, so
+/// fully-transparent codes canonicalize to (0,0,0,0)).  Outside every U1
+/// generator family: the honest negative control for the detector courts.
+fn random_rgba_asset(w: u32, h: u32) -> Asset {
+    let mut data = Vec::new();
+    for j in 0..h {
+        for i in 0..w {
+            let c =
+                vole_gfx::hash::sha256(&[0x6d, (i >> 8) as u8, i as u8, (j >> 8) as u8, j as u8]);
+            data.extend_from_slice(&c.0[..4]);
+        }
+    }
+    rasterize(&Object::Raster {
+        format: ColorFormat::Rgba8,
+        w,
+        h,
+        data,
+    })
 }
 
 /// One court asset class.
@@ -117,8 +139,8 @@ fn main() {
             )),
         },
         Case {
-            class: "hash-noise (negative)",
-            asset: rasterize(&build::noise_field(32, 32, 7)),
+            class: "random-rgba (negative)",
+            asset: random_rgba_asset(32, 32),
         },
     ];
 
@@ -193,7 +215,7 @@ fn main() {
     r.pass = all_pass;
     r.outputs.insert("all_exact".into(), all_pass.to_string());
     r.notes.push(
-        "detector coverage (Phase I scalar): constant, periodic stripes/checker, palette bands, tiled, gradient ramps/bilinear, literal fallback; structural reuse/affine/symmetry detectors and SIMD/Rayon/CUDA search land in phases J-M. Search work is counted exactly where it occurs (SearchCounter: pixels read / whole-code compares / crop bytes), not as a flat sample count.".into(),
+        "detector coverage (Phase I scalar): constant, periodic stripes/checker, palette bands, tiled, gradient ramps/bilinear, literal fallback; structural reuse/affine/symmetry detectors land in phase J, seeded-field search (SIMD batched) in phase K, Rayon/CUDA batched search in phases L-M. The negative control is SHA-256 pseudo-random bytes (no U1 generator family produces them). Search work is counted exactly where it occurs (SearchCounter: pixels read / whole-code compares / crop bytes / hash evals), not as a flat sample count.".into(),
     );
     let path = emit_receipt(r).expect("emit");
     println!("PHASE I PASS: {all_pass}; receipt {path}");

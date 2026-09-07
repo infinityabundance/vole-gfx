@@ -26,7 +26,8 @@ Cargo package (`vole-gfx`); no workspace, no subcrates.
 | H | Procedural state, generators, trajectories | implemented | phase-h |
 | I | Inverse procedural asset compiler — scalar | implemented | phase-i |
 | J | Structural fingerprints, sprite extraction, object reuse | implemented | phase-j |
-| K–N | SIMD/Rayon/CUDA search; residual factoring; DSFB | pending | – |
+| K | SIMD seeded-field inverse search (scalar + AVX2 + AVX-512) | implemented | phase-k |
+| L–N | Rayon/CUDA search; residual factoring; DSFB | pending | – |
 | O | Corpus (100+ assets) + negative controls | pending | – |
 | P–R | No-rebake / observation / partial courts | pending | – |
 | S–T | CUDA↔Vulkan, direct display | unsupported (hardware gate) | – |
@@ -97,7 +98,7 @@ Cargo package (`vole-gfx`); no workspace, no subcrates.
 - **CLI** (`src/bin/vole-gfx.rs`): `universe`, `inspect`, `validate`,
   `canonicalize`, `materialize`, `evidence verify`, `encode` (JSON authoring
   pending), `example` runner.
-- **Tests**: ~210 unit + integration tests (unit, conformance vectors,
+- **Tests**: ~223 unit + integration tests (unit, conformance vectors,
   differential backends, procedural fields, scalar materialize,
   adversarial/property) plus criterion benches; fmt + clippy `-D warnings`
   clean on default and `cuda` features.
@@ -131,25 +132,31 @@ Cargo package (`vole-gfx`); no workspace, no subcrates.
   scalar/blocked/rayon/auto for full/region/tile/band/irregular domains;
   adversarial param blobs fail closed at decode and validation.
 
-## Explicit non-claims (as of Phase J)
+## Explicit non-claims (as of Phase K)
 
-No claim of inverse compilation beyond the receipted scalar detector set
-(Phases K–N pending: SIMD/Rayon/CUDA search, recursive factorization, DSFB;
-seeded-field *search* and symmetry/affine detectors beyond the sprite
-reuse of J are future work). No claim that any detector recovers an author's
+No claim of inverse compilation beyond the receipted detector set (Phases
+L–N pending: Rayon/CUDA search, recursive factorization, DSFB). Phase K
+searches only the **deterministic gray-noise family** (`DETERMINISTIC_FIELD`,
+seeds `[0, 2¹⁶)` in the wired detector; explicit sweeps to 2²⁴); seeded-field
+search for the fractal family and for symmetry/affine reuse beyond the
+sprite extraction of J are future work. No claim that any detector recovers
+an author's
 semantics. No claim that a detected explanation is optimal over unseen
 families — the frontier is over the *evaluated* candidate set, and the
 literal fallback bounds the loss. No claim that any generator "explains"
 pixels outside byte-exact reconstruction with counted state. No claim of
 procedural *computing* from storage savings (no-rebake court is Phase P). No
-CUDA claim for generators or inverse search (CPU-only through J;
+CUDA claim for generators or inverse search (CPU-only through K;
 byte-kernel parity is the only CUDA claim). Only the CONSTANT family
 participates in the SIMD fill fast path in Phase H; other families run exact
 scalar/blocked evaluation. Palette fields embed their palette in the params
 and are not animatable by timeline `PaletteSet` ops in this phase. No claim
 that CUDA beats CPU or vice versa beyond the exact receipted domains. No
-claim that AVX-512 is faster than AVX2 — the retained phase-e measurement
-says the opposite on this court. No direct-display claim (Phases S–T
+claim that AVX-512 is faster than AVX2 *in general* — the phase-e
+materializer receipt says the opposite for that memory-bound court, while
+the phase-k search receipt says AVX-512 wins the multiply-heavy seed sweep;
+dispatch follows each receipt independently. No direct-display claim (Phases
+S–T
 unsupported pending hardware path verification). CUDA equality is claimed
 only on hosts with a genuine NVIDIA device; elsewhere it is `not evaluated
 on this host`.
@@ -175,10 +182,10 @@ on this host`.
   delta of the residual-bound document over the generator document —
   `persistent_bytes + residual_bytes` is exactly the stored candidate size.
 - **Evidence**: the phase-i gate unbakes seven asset classes (constant /
-  checker / palette-bands / tiled / gradient ramp / bilinear / hash-noise
-  negative control): exact families win at ~140–170 B persistent with zero
-  residual where detected, the noise control falls back to literal, and all
-  winners reproduce their assets byte-for-byte.
+  checker / palette-bands / tiled / gradient ramp / bilinear / SHA-256
+  random-bytes negative control): exact families win at ~140–170 B
+  persistent with zero residual where detected, the random control falls
+  back to literal, and all winners reproduce their assets byte-for-byte.
 
 ## What Phase J added (structural reuse)
 
@@ -192,7 +199,7 @@ on this host`.
   construction and re-verified by evaluation.
 - **Evidence**: phase-j gate: sprite-on-field at 524 B persistent / zero
   residual, sprite-repeat with 2 copies 570 B, 3 copies 616 B (crop stored
-  once, N placements) vs ~12 KB literal; the noise negative control stays on
+  once, N placements) vs ~12 KB literal; the SHA-256 random control stays on
   literal.  All winners reproduce their assets byte-for-byte.
 
 ## Review fixes after 0.2.0 (determinism, search-work and byte accounting)
@@ -226,10 +233,43 @@ counts of zero-residual winners are unchanged; only the search axis values
 and residual-carrying candidates' residual deltas shifted (see the current
 `phase-i-*` / `phase-j-*` receipts).
 
+## What Phase K added (seeded-field inverse search)
+
+- **Seeded-field search** (`inverse::search`): the deterministic gray-noise
+  family (`Γ = DETERMINISTIC_FIELD`) is now a searched explanation.  A gray
+  (or fully opaque-gray RGBA) surface is swept over the bounded seed universe
+  `[0, range)`; `accept(seed)` iff the field reproduces the surface on every
+  sample (zero mismatches — host-independent).  A deterministic corner-anchor
+  prefilter is a pure pruning device (necessary condition only; acceptance is
+  always the full-surface check).
+- **Backends**: the scalar sweep is the semantic oracle and the frontier's
+  canonical counter; AVX2 kernels emulate the 64-bit multiplies with
+  `vpmuludq` (4 seeds/register) and AVX-512 kernels use native `vpmullq`
+  (`avx512dq`, 8 seeds/register) — every lane reproduces the scalar hash
+  bit-for-bit, so the accepted seed set is identical across backends
+  (differential tests + gate parity rows).  SIMD may execute more redundant
+  work (whole lanes through every anchor); that is receipted, never a
+  frontier axis.
+- **Wired-in detector**: `seeded-field` proposals join the detector chain
+  (canonical scalar sweep over `DEFAULT_SEED_SWEEP_RANGE` = 2¹⁶, smallest
+  matching seed), so `unbake` of a noise-field asset now returns the exact
+  procedural explanation (~144 B persistent, zero residual) instead of
+  falling back to literal.
+- **Evidence**: the phase-k gate unbakes eight courts (Gray8 + opaque-gray
+  RGBA noise fields at several seeds/extents; SHA-256 random gray and random
+  RGBA negatives; a fractal court — a seeded family *not* in the searched
+  universe, which correctly stays literal; a colorful analytic surface that
+  never triggers a sweep).  For every gray court the gate sweeps 2²⁰ seeds
+  with scalar/AVX2/AVX-512/auto and records identical accepted sets and
+  median wall times: on this host AVX-512 ≈0.74–0.78 ms vs AVX2 ≈1.9 ms vs
+  scalar ≈1.2 ms, so `SEARCH_AUTO_PREFER_AVX512` is now true (search-kernel
+  dispatch follows this measurement; materializer dispatch is unchanged and
+  separately evidence-ordered).
+
 ## What each phase must add before completion
 
-- H, I, J: implemented above.
-- K–M: SIMD / Rayon / CUDA batched inverse search.
+- H, I, J, K: implemented above.
+- L–M: Rayon / CUDA batched inverse search.
 - N: hierarchical residual factorization + DSFB zero-authority governor.
 - O: 100+ asset public corpus with per-asset license/hash manifest, split
   TRAIN/VALIDATION/TEST, negative controls.

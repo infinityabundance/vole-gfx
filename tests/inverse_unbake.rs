@@ -223,12 +223,32 @@ fn gray_asset_unbakes_in_gray_space() {
     assert_all_survivors_exact(&a, &f);
 }
 
-/// Negative control: a high-entropy hash-noise asset must fall back to the
-/// literal raster under the byte-min profile (its generator proposals carry
-/// a near-full residual and are dominated or dominated-in-profile).
+/// Negative control: high-entropy SHA-256 bytes (not producible by any U1
+/// generator family) must fall back to the literal raster under the byte-min
+/// profile (its generator proposals carry a near-full residual and are
+/// dominated or dominated-in-profile).  The bytes are canonicalized through
+/// the materializer: a real baked asset is a materializer output, so
+/// fully-transparent codes canonicalize to (0,0,0,0).
 #[test]
-fn noise_asset_falls_back_to_literal() {
-    let a = rasterize(&build::noise_field(24, 24, 99), ColorFormat::Rgba8);
+fn random_noise_asset_falls_back_to_literal() {
+    // deterministic SHA-256-derived pseudo-random RGBA raster (per sample)
+    let mut data = Vec::new();
+    for j in 0..24u32 {
+        for i in 0..24u32 {
+            let c =
+                vole_gfx::hash::sha256(&[0x99, (i >> 8) as u8, i as u8, (j >> 8) as u8, j as u8]);
+            data.extend_from_slice(&c.0[..4]);
+        }
+    }
+    let a = rasterize(
+        &Object::Raster {
+            format: ColorFormat::Rgba8,
+            w: 24,
+            h: 24,
+            data,
+        },
+        ColorFormat::Rgba8,
+    );
     let (f, best) = inverse::unbake_best(&a).unwrap();
     assert_eq!(
         best.name, "literal",
@@ -240,12 +260,37 @@ fn noise_asset_falls_back_to_literal() {
         if c.name != "literal" {
             assert!(
                 c.residual_bytes >= a.data.len() as u64,
-                "{} should not explain noise with a tiny residual",
+                "{} should not explain random bytes with a tiny residual",
                 c.name
             );
         }
     }
     assert_all_survivors_exact(&a, &f);
+}
+
+/// Phase K positive: a deterministic-field asset (gray noise from a known
+/// seed) must be unbaked to the exact `seeded-field` explanation with zero
+/// residual, beating the literal fallback on the byte-min profile.
+#[test]
+fn unbakes_seeded_field_asset() {
+    for seed in [0u64, 7, 4242, 65535] {
+        let a = rasterize(&build::noise_field(24, 24, seed), ColorFormat::Rgba8);
+        let (f, best) = inverse::unbake_best(&a).unwrap();
+        let ns = names(&f);
+        assert!(
+            ns.iter().any(|n| n == "seeded-field"),
+            "seeded-field expected for seed {seed}, got {ns:?}"
+        );
+        assert_eq!(best.name, "seeded-field", "seed {seed}");
+        assert_eq!(best.residual_bytes, 0, "seed {seed}");
+        assert!(
+            best.persistent_bytes < a.data.len() as u64 / 4,
+            "seed {seed}: persistent {} vs literal {}",
+            best.persistent_bytes,
+            a.data.len()
+        );
+        assert_all_survivors_exact(&a, &f);
+    }
 }
 
 /// The compiler's deterministic ordering: same asset, same frontier names.
@@ -274,8 +319,9 @@ fn unbake_is_deterministic() {
 
 /// Every generator-family court doc whose output is an asset must produce an
 /// explanation whose materialization equals the asset (identity court across
-/// the remaining families: fractal, stripes, object-family/affine-reuse are
-/// non-exact-by-detector but must still round-trip through the fallback).
+/// the remaining families: fractal noise and object-family/affine-reuse are
+/// non-exact-by-detector in Phase K — only the deterministic gray-noise
+/// family is seed-searched — but must still round-trip through the fallback).
 #[test]
 fn identity_roundtrip_through_fallback_for_non_detected_families() {
     // fractal: no detector explains it exactly; the fallback must round-trip

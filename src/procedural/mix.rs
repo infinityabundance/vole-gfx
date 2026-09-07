@@ -29,6 +29,15 @@ pub(crate) fn fmix3(seed: u64, i: u32, j: u32, k: u32) -> u64 {
     )
 }
 
+/// Pre-mix lattice constant of sample `(i, j)` for octave `k = 0` (the
+/// deterministic-field family): `fmix3` folds a seed by XOR against this
+/// constant, so a seed sweep over a fixed sample only varies the seed term.
+/// SIMD search kernels broadcast this per-sample constant.
+#[inline(always)]
+pub(crate) const fn lattice_const(i: u32, j: u32) -> u64 {
+    (i as u64).wrapping_mul(K1) ^ (j as u64).wrapping_mul(K2)
+}
+
 /// Extract the deterministic 8-bit gray byte of a mix value (high bits).
 #[inline(always)]
 pub(crate) fn gray_byte(h: u64) -> u8 {

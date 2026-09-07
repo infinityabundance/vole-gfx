@@ -73,9 +73,25 @@ fn field_and_sprites(at: &[(i32, i32)]) -> Asset {
     rasterize(&d, 64, 48)
 }
 
-fn noise_asset() -> Asset {
+/// Deterministic SHA-256-derived pseudo-random RGBA raster, canonicalized
+/// through the materializer (a real baked asset is a materializer output).
+/// Outside every U1 generator family: the honest negative control.
+fn random_asset() -> Asset {
+    let mut data = Vec::new();
+    for j in 0..24u32 {
+        for i in 0..24u32 {
+            let c =
+                vole_gfx::hash::sha256(&[0x4a, (i >> 8) as u8, i as u8, (j >> 8) as u8, j as u8]);
+            data.extend_from_slice(&c.0[..4]);
+        }
+    }
     let mut d = Document::new();
-    d.objects.push(build::noise_field(24, 24, 99));
+    d.objects.push(Object::Raster {
+        format: ColorFormat::Rgba8,
+        w: 24,
+        h: 24,
+        data,
+    });
     d.instances.push(placed(0, 1, 0, 0, 0));
     rasterize(&d, 24, 24)
 }
@@ -95,8 +111,8 @@ fn main() {
             asset: field_and_sprites(&[(10, 8), (44, 34), (4, 30)]),
         },
         Case {
-            class: "negative-noise",
-            asset: noise_asset(),
+            class: "negative-random",
+            asset: random_asset(),
         },
     ];
     let mut r = Receipt::new("phase-j-structural-reuse", "matrix");
