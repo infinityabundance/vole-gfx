@@ -42,8 +42,10 @@ fn rasterize(object: &Object) -> Asset {
 
 /// Deterministic SHA-256-derived pseudo-random RGBA raster, canonicalized
 /// through the materializer (a real baked asset is a materializer output, so
-/// fully-transparent codes canonicalize to (0,0,0,0)).  Outside every U1
-/// generator family: the honest negative control for the detector courts.
+/// fully-transparent codes canonicalize to (0,0,0,0)).  Independently
+/// generated control bytes: the gate receipt records that no detector (and
+/// no Phase-K seed sweep) matches them exactly, so the byte-min profile
+/// retains the literal fallback.
 fn random_rgba_asset(w: u32, h: u32) -> Asset {
     let mut data = Vec::new();
     for j in 0..h {
@@ -215,7 +217,7 @@ fn main() {
     r.pass = all_pass;
     r.outputs.insert("all_exact".into(), all_pass.to_string());
     r.notes.push(
-        "detector coverage (Phase I scalar): constant, periodic stripes/checker, palette bands, tiled, gradient ramps/bilinear, literal fallback; structural reuse/affine/symmetry detectors land in phase J, seeded-field search (SIMD batched) in phase K, Rayon/CUDA batched search in phases L-M. The negative control is SHA-256 pseudo-random bytes (no U1 generator family produces them). Search work is counted exactly where it occurs (SearchCounter: pixels read / whole-code compares / crop bytes / hash evals), not as a flat sample count.".into(),
+        "detector coverage (Phase I scalar): constant, periodic stripes/checker, palette bands, tiled, gradient ramps/bilinear, literal fallback; structural reuse/affine/symmetry detectors land in phase J, seeded-field search (SIMD batched) in phase K, Rayon/CUDA batched search in phases L-M. The negative control is independently generated SHA-256 pseudo-random bytes with no exact match in the evaluated detector/search universes (receipted). Search work is counted exactly where it occurs (SearchCounter: pixels read / whole-code compares / crop bytes / hash evals), not as a flat sample count.".into(),
     );
     let path = emit_receipt(r).expect("emit");
     println!("PHASE I PASS: {all_pass}; receipt {path}");

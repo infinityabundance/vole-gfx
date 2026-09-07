@@ -256,15 +256,47 @@ and residual-carrying candidates' residual deltas shifted (see the current
   procedural explanation (~144 B persistent, zero residual) instead of
   falling back to literal.
 - **Evidence**: the phase-k gate unbakes eight courts (Gray8 + opaque-gray
-  RGBA noise fields at several seeds/extents; SHA-256 random gray and random
-  RGBA negatives; a fractal court — a seeded family *not* in the searched
-  universe, which correctly stays literal; a colorful analytic surface that
-  never triggers a sweep).  For every gray court the gate sweeps 2²⁰ seeds
-  with scalar/AVX2/AVX-512/auto and records identical accepted sets and
-  median wall times: on this host AVX-512 ≈0.74–0.78 ms vs AVX2 ≈1.9 ms vs
-  scalar ≈1.2 ms, so `SEARCH_AUTO_PREFER_AVX512` is now true (search-kernel
-  dispatch follows this measurement; materializer dispatch is unchanged and
-  separately evidence-ordered).
+  RGBA noise fields at several seeds/extents; independently generated
+  SHA-256 random gray and random RGBA negatives with no exact match in the
+  evaluated seed-sweep universe; a fractal court — a seeded family *not* in
+  the searched universe, which correctly stays literal; a colorful analytic
+  surface that never triggers a sweep).  For every gray court the gate
+  sweeps 2²⁰ seeds with scalar/AVX2/AVX-512/auto and records identical
+  accepted sets and median wall times: on this host AVX-512 ≈0.74–0.78 ms
+  vs AVX2 ≈1.9 ms vs scalar ≈1.2 ms.  Auto dispatch is evidence-ordered
+  over that full ranking — AVX-512 first, then the scalar oracle, then
+  AVX2 (`SEARCH_AUTO_PREFER_AVX512`, never preferring a path the receipts
+  measured slower); materializer dispatch is unchanged and separately
+  evidence-ordered.  Requested seed ranges above `MAX_SEED_SWEEP_RANGE`
+  (2²⁴) are **rejected** — never silently truncated — so a "no match"
+  sweep always refers to the requested universe.
+
+## Review fixes after 0.4.0 (dispatch order, range rejection, claim wording)
+
+External review of the Phase K release found four items; all are fixed on
+current main:
+
+1. **Evidence-ordered search dispatch**: `sweep_auto` previously fell back
+   AVX-512 → AVX2 → scalar, contradicting the phase-k receipt that measures
+   scalar faster than AVX2 on this kernel family (short-circuit per seed vs
+   whole-lane `vpmuludq` emulation).  The chain is now AVX-512 → scalar →
+   AVX2 — never a measured-slower path — with AVX2 kept as a receipted
+   forced-backend row; Phase W replaces the constant with a profile-driven
+   model.
+2. **No silent range truncation**: sweep ranges above `MAX_SEED_SWEEP_RANGE`
+   (2²⁴) are rejected with `Err(Reject::CountExceedsLimit)` by every sweep
+   (and by auto), before the ISA and surface checks, so the error is
+   host-independent and a "no match" always refers to the requested
+   universe.
+3. **Precise negative-control language**: claims/docs/tests no longer say
+   SHA-256 controls are "outside every U1 generator family"; they state what
+   is demonstrated — the independently generated controls had no exact match
+   in the *evaluated* detector/seed-sweep universes (receipted).
+4. **Formalized search-work boundary** (`work.rs`): `W_search =
+   W_discovery + W_discrimination`; preprocessing/format normalization
+   (gray-surface derivation — format-symmetric: charged zero by Gray8 and
+   RGBA alike), representation construction, and wall-clock setup are
+   outside the metric (bounded or receipted separately).
 
 ## What each phase must add before completion
 

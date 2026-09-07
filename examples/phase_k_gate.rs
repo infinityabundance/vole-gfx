@@ -4,24 +4,31 @@
 //! - deterministic gray-noise field assets (Gray8 and opaque-gray Rgba8,
 //!   several seeds/extents) that the wired-in detector must unbake to the
 //!   exact `seeded-field` explanation with zero residual;
-//! - negative controls (SHA-256 random gray and random RGBA) and the fractal
-//!   family (seeded but NOT part of the Phase K searched universe) that must
-//!   fall back to literal;
-//! - a colorful analytic asset (no gray surface) that must not trigger a
-//!   seed sweep at all.
+//! - negative controls — independently generated SHA-256 random gray and
+//!   random RGBA bytes for which the gate asserts **no exact match in the
+//!   evaluated seeded-field universe** over `[0, RANGE)` (the literal
+//!   fallback must win the profile);
+//! - the fractal family (seeded but NOT part of the Phase K searched
+//!   universe), which must fall back to literal;
+//! - a colorful analytic asset (no gray surface), which must not trigger a
+//!   seed sweep at all (`Ok(None)`).
 //!
 //! For every gray-surface court the gate sweeps `[0, RANGE)` with the scalar
 //! oracle and, when the host provides them, the AVX2 and AVX-512 batched
 //! kernels, recording per-backend wall time and executed hash evaluations and
 //! asserting the **accepted seed sets are identical across backends**.  The
-//! auto-dispatch row records which path the policy constant selected.
+//! auto-dispatch row records which path the evidence-ordered policy selected.
+//!
+//! Ranges above `MAX_SEED_SWEEP_RANGE` are rejected by the API (never
+//! truncated); this court's `RANGE` is in-cap by construction.
 //!
 //! Run: `cargo run --release --example phase_k_gate`
 
 use vole_gfx::color::ColorFormat;
 use vole_gfx::evidence::receipt::{Receipt, emit_receipt};
-use vole_gfx::inverse::search::{sweep_auto, sweep_avx2, sweep_avx512, sweep_scalar};
+use vole_gfx::inverse::search::{Sweep, sweep_auto, sweep_avx2, sweep_avx512, sweep_scalar};
 use vole_gfx::inverse::{self, asset::Asset};
+use vole_gfx::limits::Reject;
 use vole_gfx::materialize::scalar::materialize_document;
 use vole_gfx::observation::ObservationRequest;
 use vole_gfx::procedural::build;
@@ -47,7 +54,8 @@ fn field_rgba(w: u32, h: u32, seed: u64) -> Asset {
     Asset::new(w, h, ColorFormat::Rgba8, data).unwrap()
 }
 
-/// SHA-256 pseudo-random bytes (outside every U1 generator family).
+/// Independently generated SHA-256 pseudo-random gray bytes (control input;
+/// the gate asserts no exact match in the evaluated seeded-field universe).
 fn random_gray(w: u32, h: u32, tag: u8) -> Asset {
     let mut data = Vec::with_capacity((w * h) as usize);
     for j in 0..h {
@@ -60,9 +68,8 @@ fn random_gray(w: u32, h: u32, tag: u8) -> Asset {
     Asset::new(w, h, ColorFormat::Gray8, data).unwrap()
 }
 
-/// SHA-256 pseudo-random bytes canonicalized through the materializer (a
-/// real baked asset is a materializer output) and outside every U1 generator
-/// family.
+/// Independently generated SHA-256 pseudo-random RGBA bytes canonicalized
+/// through the materializer (a real baked asset is a materializer output).
 fn random_rgba(w: u32, h: u32, tag: u8) -> Asset {
     let mut data = Vec::new();
     for j in 0..h {
@@ -132,6 +139,13 @@ fn median_ns(runs: usize, mut f: impl FnMut()) -> u64 {
     v[v.len() / 2]
 }
 
+/// Unwrap a sweep probe for the gate's own in-cap court range: `Err` here
+/// would be a gate bug (a rejected range), so it fails the gate loudly.
+/// `Ok(None)` stays `None` (host lacks the ISA, or the surface is not gray).
+fn probe(r: Result<Option<Sweep>, Reject>) -> Option<Sweep> {
+    r.expect("court sweep range must be within MAX_SEED_SWEEP_RANGE")
+}
+
 fn main() {
     let sweep_range: u64 = 1 << 20; // explicit court range for the backend rows
     let cases = [
@@ -183,8 +197,9 @@ fn main() {
     r.inputs.insert(
         "policy".into(),
         format!(
-            "search auto prefer avx512: {}",
-            vole_gfx::inverse::search::SEARCH_AUTO_PREFER_AVX512
+            "auto order: avx512 -> scalar -> avx2 (evidence-ordered; SEARCH_AUTO_PREFER_AVX512={}); range policy: reject > MAX_SEED_SWEEP_RANGE ({})",
+            vole_gfx::inverse::search::SEARCH_AUTO_PREFER_AVX512,
+            vole_gfx::inverse::search::MAX_SEED_SWEEP_RANGE
         ),
     );
     let mut all_pass = true;
@@ -217,69 +232,72 @@ fn main() {
             .insert(format!("{p}_winner_ns"), best.materialize_ns);
 
         // ---- backend sweep rows (gray surfaces only)
-        if let Some(scalar) = sweep_scalar(&c.asset, sweep_range) {
-            let scalar_matches = scalar.matches.clone();
-            r.outputs.insert(
-                format!("{p}_scalar_matches"),
-                format!("{:?}", scalar.matches),
-            );
-            r.metrics
-                .insert(format!("{p}_scalar_hashes"), scalar.work.hash_ops);
-            r.metrics.insert(
-                format!("{p}_scalar_ns"),
-                median_ns(3, || {
-                    let _ = sweep_scalar(&c.asset, sweep_range);
-                }),
-            );
-            let mut parity = true;
-            if let Some(avx2) = sweep_avx2(&c.asset, sweep_range) {
-                let m = avx2.matches.clone();
-                parity &= m == scalar_matches;
+        match probe(sweep_scalar(&c.asset, sweep_range)) {
+            Some(scalar) => {
+                let scalar_matches = scalar.matches.clone();
+                r.outputs.insert(
+                    format!("{p}_scalar_matches"),
+                    format!("{:?}", scalar.matches),
+                );
                 r.metrics
-                    .insert(format!("{p}_avx2_hashes"), avx2.work.hash_ops);
+                    .insert(format!("{p}_scalar_hashes"), scalar.work.hash_ops);
                 r.metrics.insert(
-                    format!("{p}_avx2_ns"),
-                    median_ns(5, || {
-                        let _ = sweep_avx2(&c.asset, sweep_range);
+                    format!("{p}_scalar_ns"),
+                    median_ns(3, || {
+                        let _ = sweep_scalar(&c.asset, sweep_range);
                     }),
                 );
+                let mut parity = true;
+                if let Some(avx2) = probe(sweep_avx2(&c.asset, sweep_range)) {
+                    let m = avx2.matches.clone();
+                    parity &= m == scalar_matches;
+                    r.metrics
+                        .insert(format!("{p}_avx2_hashes"), avx2.work.hash_ops);
+                    r.metrics.insert(
+                        format!("{p}_avx2_ns"),
+                        median_ns(5, || {
+                            let _ = sweep_avx2(&c.asset, sweep_range);
+                        }),
+                    );
+                    r.outputs
+                        .insert(format!("{p}_avx2_matches"), format!("{m:?}"));
+                }
+                if let Some(avx512) = probe(sweep_avx512(&c.asset, sweep_range)) {
+                    let m = avx512.matches.clone();
+                    parity &= m == scalar_matches;
+                    r.metrics
+                        .insert(format!("{p}_avx512_hashes"), avx512.work.hash_ops);
+                    r.metrics.insert(
+                        format!("{p}_avx512_ns"),
+                        median_ns(5, || {
+                            let _ = sweep_avx512(&c.asset, sweep_range);
+                        }),
+                    );
+                    r.outputs
+                        .insert(format!("{p}_avx512_matches"), format!("{m:?}"));
+                }
+                // auto dispatch row
+                if let Some(auto) = probe(sweep_auto(&c.asset, sweep_range)) {
+                    parity &= auto.matches == scalar_matches;
+                    r.outputs
+                        .insert(format!("{p}_auto_path"), auto.backend.name().into());
+                    r.metrics.insert(
+                        format!("{p}_auto_ns"),
+                        auto_median_ns(&c.asset, sweep_range),
+                    );
+                    r.metrics
+                        .insert(format!("{p}_auto_hashes"), auto.work.hash_ops);
+                }
+                all_pass &= parity;
                 r.outputs
-                    .insert(format!("{p}_avx2_matches"), format!("{m:?}"));
+                    .insert(format!("{p}_accept_parity"), parity.to_string());
             }
-            if let Some(avx512) = sweep_avx512(&c.asset, sweep_range) {
-                let m = avx512.matches.clone();
-                parity &= m == scalar_matches;
-                r.metrics
-                    .insert(format!("{p}_avx512_hashes"), avx512.work.hash_ops);
-                r.metrics.insert(
-                    format!("{p}_avx512_ns"),
-                    median_ns(5, || {
-                        let _ = sweep_avx512(&c.asset, sweep_range);
-                    }),
+            None => {
+                r.outputs.insert(
+                    format!("{p}_scalar_matches"),
+                    "none (not a gray surface)".into(),
                 );
-                r.outputs
-                    .insert(format!("{p}_avx512_matches"), format!("{m:?}"));
             }
-            // auto dispatch row
-            if let Some(auto) = sweep_auto(&c.asset, sweep_range) {
-                parity &= auto.matches == scalar_matches;
-                r.outputs
-                    .insert(format!("{p}_auto_path"), auto.backend.name().into());
-                r.metrics.insert(
-                    format!("{p}_auto_ns"),
-                    auto_median_ns(&c.asset, sweep_range),
-                );
-                r.metrics
-                    .insert(format!("{p}_auto_hashes"), auto.work.hash_ops);
-            }
-            all_pass &= parity;
-            r.outputs
-                .insert(format!("{p}_accept_parity"), parity.to_string());
-        } else {
-            r.outputs.insert(
-                format!("{p}_scalar_matches"),
-                "none (not a gray surface)".into(),
-            );
         }
         eprintln!(
             "a{k} {:<32} winner={:<16} expect={:<16} exact={} persistent={}",

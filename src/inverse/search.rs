@@ -31,6 +31,29 @@
 //! lanes through every anchor and cannot short-circuit per lane); the
 //! accepted set never diverges.
 //!
+//! # Range policy
+//!
+//! Requested ranges above `MAX_SEED_SWEEP_RANGE` are **rejected** with
+//! `Err(Reject::CountExceedsLimit)` by every sweep function (and therefore
+//! by auto dispatch).  There is no silent clamping: a caller that asks for a
+//! `2^30`-seed universe gets an error, not an empty match set over a
+//! `2^24`-seed prefix.  `Ok(None)` means the surface is not in the searchable
+//! code space (not gray / not fully opaque-gray RGBA) or — for the SIMD
+//! backends — the host lacks the ISA; `Err` means the request itself is
+//! invalid.
+//!
+//! # Search-work accounting boundary
+//!
+//! The `SearchCounter` returned in a `Sweep` counts **search operations only**
+//! (see `work.rs` for the frozen metric): anchor evaluations and survivor
+//! full-surface verifications (each = one hash evaluation + one whole-code
+//! comparison, counted exactly where executed).  Format normalization
+//! (deriving the gray surface: an O(w·h) clone for Gray8 or code walk for
+//! RGBA) is *preprocessing* — bounded by the surface, identical for every
+//! asset of a given surface, and deliberately outside the search-work
+//! metric; the wired-in detector therefore does not charge it to its
+//! proposal either.
+//!
 //! # Unsafe policy
 //!
 //! All intrinsic-using code lives in `#[target_feature] unsafe fn` kernels
@@ -45,6 +68,7 @@ use super::detect::{Proposal, one_object_doc};
 use super::work::SearchCounter;
 use crate::color::ColorFormat;
 use crate::fixed::{HASH64_ADD, HASH64_M1, HASH64_M2};
+use crate::limits::Reject;
 use crate::procedural::mix::{fmix3, gray_byte, lattice_const};
 
 // SIMD vector types used in kernel signatures (defined for the whole x86_64
@@ -58,18 +82,26 @@ use core::arch::x86_64::{__m256i, __m512i};
 /// courts may sweep larger explicit ranges via the public sweep functions.
 pub const DEFAULT_SEED_SWEEP_RANGE: u64 = 1 << 16;
 
-/// Normative cap on any single seed sweep (hard bound; courts stay below it).
+/// Normative cap on any single seed sweep.  Ranges above this cap are
+/// **rejected** (`Err(Reject::CountExceedsLimit)`), never silently truncated:
+/// a "no match" result must always mean "no match in the requested universe",
+/// never "no match in a clipped prefix of it".  Phase M courts may raise this
+/// cap only with hardware evidence; the corpus seal keeps the value receipted.
 pub const MAX_SEED_SWEEP_RANGE: u64 = 1 << 24;
 
 /// Auto-dispatch policy for the *search* kernels (independent of the
 /// materializer's evidence-ordered dispatch).  The phase-k gate receipt
-/// (this host: RTX-class Zen5, range 2^20, six gray courts, medians)
-/// measured AVX-512 ~0.74–0.78 ms vs AVX2 ~1.9–2.0 ms vs scalar ~1.2 ms for
-/// the identical accepted sets — the native `vpmullq` of `avx512dq` wins this
-/// multiply-heavy kernel family, while AVX2's `vpmuludq` emulation loses
-/// even to the short-circuiting scalar oracle.  Auto therefore prefers
-/// AVX-512 (F+DQ) for search; hosts without it fall back to AVX2, then
-/// scalar.  Forced-backend rows stay receipted so the policy is derivable.
+/// (this host, range 2^20, six gray courts, medians) measured the *full*
+/// order: AVX-512 ~0.74–0.78 ms, scalar ~1.2 ms, AVX2 ~1.9–2.0 ms — the
+/// native `vpmullq` of `avx512dq` wins the multiply-heavy seed sweep, and the
+/// scalar oracle beats AVX2 because it short-circuits per seed while AVX2
+/// evaluates whole lanes through every anchor at `vpmuludq`-emulation cost.
+/// `sweep_auto` therefore tries AVX-512 first, then the scalar oracle, and
+/// only then AVX2 — the fallback chain never prefers a path the receipts
+/// measured as slower on the current hosts.  AVX2 remains a receipted
+/// forced-backend row and may win on another microarchitecture; the
+/// corpus/autotuning phases (O/W) replace this constant with a
+/// profile-driven model.
 pub const SEARCH_AUTO_PREFER_AVX512: bool = true;
 
 /// Which execution path produced a sweep result (recorded in receipts).
@@ -91,11 +123,13 @@ impl SweepBackend {
 }
 
 /// Result of one seed sweep over `[0, range)`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sweep {
     pub backend: SweepBackend,
-    /// Matching seeds, ascending.  Empty means "no bounded explanation in the
-    /// evaluated universe" (the literal fallback then owns the frontier).
+    /// Matching seeds, ascending.  Empty means "no exact match in the
+    /// **requested** universe" — ranges are rejected above the cap, never
+    /// truncated, so an empty set is always a true negative over what was
+    /// asked for (the literal fallback then owns the frontier).
     pub matches: Vec<u64>,
     /// Search work executed by this backend (see `work.rs`): the scalar
     /// counter counts actual short-circuiting hash evaluations; SIMD
@@ -170,47 +204,36 @@ pub fn asset_gray_surface(asset: &Asset) -> Option<Vec<u8>> {
     }
 }
 
-/// Same as `asset_gray_surface` but counts the executed code comparisons into
-/// `work` (used by the wired-in detector so its whole scan is accounted).
-fn gray_surface_counted(asset: &Asset, work: &mut SearchCounter) -> Option<Vec<u8>> {
-    let n = (asset.w * asset.h) as usize;
-    match asset.format {
-        ColorFormat::Gray8 => Some(asset.data.clone()),
-        ColorFormat::Rgba8 => {
-            let mut gray = Vec::with_capacity(n);
-            // SAFETY: RGBA8 asset payloads are always a whole number of
-            // 4-byte codes (Asset::new enforces w*h*4 bytes).
-            for c in asset.data.as_chunks::<4>().0 {
-                work.compare_codes(1);
-                if c[0] != c[1] || c[1] != c[2] || c[3] != 255 {
-                    return None;
-                }
-                gray.push(c[0]);
-            }
-            Some(gray)
-        }
+/// Reject seed ranges above the normative cap instead of silently truncating
+/// them (see the module docs, "Range policy").  The check is host- and
+/// backend-independent, so every sweep reports the same rejection.
+fn checked_range(range: u64) -> Result<u64, Reject> {
+    if range > MAX_SEED_SWEEP_RANGE {
+        return Err(Reject::CountExceedsLimit);
     }
-}
-
-fn clamp_range(range: u64) -> u64 {
-    range.min(MAX_SEED_SWEEP_RANGE)
+    Ok(range)
 }
 
 /// Canonical scalar sweep (semantic oracle).  The returned `work` counts
 /// exactly the hash evaluations the scalar search performs: anchors per seed
 /// with per-seed short-circuit, then full-surface verification of survivors
 /// with per-sample short-circuit.
-pub fn sweep_scalar(asset: &Asset, range: u64) -> Option<Sweep> {
-    let gray = asset_gray_surface(asset)?;
-    let range = clamp_range(range);
+///
+/// `Ok(None)` when the asset is not a gray surface; `Err` when `range`
+/// exceeds `MAX_SEED_SWEEP_RANGE` (rejected, never truncated).
+pub fn sweep_scalar(asset: &Asset, range: u64) -> Result<Option<Sweep>, Reject> {
+    let range = checked_range(range)?;
+    let Some(gray) = asset_gray_surface(asset) else {
+        return Ok(None);
+    };
     let table = anchor_table(asset.w, &gray, &default_anchors(asset.w, asset.h));
     let mut work = SearchCounter::default();
     let matches = scalar_sweep_gray(asset.w, asset.h, &gray, range, &table, &mut work);
-    Some(Sweep {
+    Ok(Some(Sweep {
         backend: SweepBackend::Scalar,
         matches,
         work,
-    })
+    }))
 }
 
 /// Scalar sweep over an already-derived gray surface (shared by the detector
@@ -480,14 +503,19 @@ unsafe fn chunk_sweep_avx2(
     (matches, verified)
 }
 
-/// AVX2 sweep (identical accepted set to `sweep_scalar`).  Returns `None`
-/// when the host lacks AVX2 or the asset is not a gray surface.
-pub fn sweep_avx2(asset: &Asset, range: u64) -> Option<Sweep> {
+/// AVX2 sweep (identical accepted set to `sweep_scalar`).  Returns
+/// `Ok(None)` when the host lacks AVX2 or the asset is not a gray surface;
+/// `Err` when `range` exceeds `MAX_SEED_SWEEP_RANGE` (rejected, never
+/// truncated — the range check runs before the ISA check so the error is
+/// host-independent).
+pub fn sweep_avx2(asset: &Asset, range: u64) -> Result<Option<Sweep>, Reject> {
+    let range = checked_range(range)?;
     if !has_avx2() {
-        return None;
+        return Ok(None);
     }
-    let gray = asset_gray_surface(asset)?;
-    let range = clamp_range(range);
+    let Some(gray) = asset_gray_surface(asset) else {
+        return Ok(None);
+    };
     let table = anchor_table(asset.w, &gray, &default_anchors(asset.w, asset.h));
     let chunks = range.div_ceil(4);
     // SAFETY: has_avx2() checked above; gray covers w*h bytes.
@@ -498,16 +526,16 @@ pub fn sweep_avx2(asset: &Asset, range: u64) -> Option<Sweep> {
     // anchor; every anchor survivor was verified over the full surface.
     work.eval_hashes(chunks * 4 * per + verified * (asset.w as u64 * asset.h as u64));
     work.compare_codes(chunks * 4 * per + verified * (asset.w as u64 * asset.h as u64));
-    Some(Sweep {
+    Ok(Some(Sweep {
         backend: SweepBackend::Avx2,
         matches,
         work,
-    })
+    }))
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-pub fn sweep_avx2(_asset: &Asset, _range: u64) -> Option<Sweep> {
-    None
+pub fn sweep_avx2(_asset: &Asset, _range: u64) -> Result<Option<Sweep>, Reject> {
+    Ok(None)
 }
 
 // ---------------------------------------------------------------------------
@@ -710,14 +738,18 @@ unsafe fn chunk_sweep_avx512(
     (matches, verified)
 }
 
-/// AVX-512 sweep (identical accepted set to `sweep_scalar`).  Returns `None`
-/// when the host lacks AVX-512 (F+DQ) or the asset is not a gray surface.
-pub fn sweep_avx512(asset: &Asset, range: u64) -> Option<Sweep> {
+/// AVX-512 sweep (identical accepted set to `sweep_scalar`).  Returns
+/// `Ok(None)` when the host lacks AVX-512 (F+DQ) or the asset is not a gray
+/// surface; `Err` when `range` exceeds `MAX_SEED_SWEEP_RANGE` (rejected,
+/// never truncated).
+pub fn sweep_avx512(asset: &Asset, range: u64) -> Result<Option<Sweep>, Reject> {
+    let range = checked_range(range)?;
     if !has_avx512() {
-        return None;
+        return Ok(None);
     }
-    let gray = asset_gray_surface(asset)?;
-    let range = clamp_range(range);
+    let Some(gray) = asset_gray_surface(asset) else {
+        return Ok(None);
+    };
     let table = anchor_table(asset.w, &gray, &default_anchors(asset.w, asset.h));
     let chunks = range.div_ceil(8);
     // SAFETY: has_avx512() checked above; gray covers w*h bytes.
@@ -726,29 +758,33 @@ pub fn sweep_avx512(asset: &Asset, range: u64) -> Option<Sweep> {
     let per = table.len() as u64;
     work.eval_hashes(chunks * 8 * per + verified * (asset.w as u64 * asset.h as u64));
     work.compare_codes(chunks * 8 * per + verified * (asset.w as u64 * asset.h as u64));
-    Some(Sweep {
+    Ok(Some(Sweep {
         backend: SweepBackend::Avx512,
         matches,
         work,
-    })
+    }))
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-pub fn sweep_avx512(_asset: &Asset, _range: u64) -> Option<Sweep> {
-    None
+pub fn sweep_avx512(_asset: &Asset, _range: u64) -> Result<Option<Sweep>, Reject> {
+    Ok(None)
 }
 
-/// Auto dispatch over the search backends.  Order follows the recorded policy
-/// (`SEARCH_AUTO_PREFER_AVX512`), not ISA width; the path actually used is
-/// returned in `Sweep.backend` and recorded in receipts.
-pub fn sweep_auto(asset: &Asset, range: u64) -> Option<Sweep> {
-    if SEARCH_AUTO_PREFER_AVX512 && let Some(s) = sweep_avx512(asset, range) {
-        return Some(s);
+/// Auto dispatch over the search backends.  Evidence-ordered (see
+/// `SEARCH_AUTO_PREFER_AVX512`): AVX-512 first when available, then the
+/// scalar oracle, then AVX2 — the fallback chain never prefers a path the
+/// phase-k receipt measured as slower on the current hosts.  The path
+/// actually used is returned in `Sweep.backend` and recorded in receipts.
+/// `Err` propagates from the range check (rejection, never truncation);
+/// `Ok(None)` when the asset is not a gray surface.
+pub fn sweep_auto(asset: &Asset, range: u64) -> Result<Option<Sweep>, Reject> {
+    if SEARCH_AUTO_PREFER_AVX512 && let Some(s) = sweep_avx512(asset, range)? {
+        return Ok(Some(s));
     }
-    if let Some(s) = sweep_avx2(asset, range) {
-        return Some(s);
+    if let Some(s) = sweep_scalar(asset, range)? {
+        return Ok(Some(s));
     }
-    sweep_scalar(asset, range)
+    sweep_avx2(asset, range)
 }
 
 // ---------------------------------------------------------------------------
@@ -761,21 +797,17 @@ pub fn sweep_auto(asset: &Asset, range: u64) -> Option<Sweep> {
 /// canonical scalar sweep finds a matching seed.  Only the *smallest*
 /// matching seed is proposed (deterministic; any match is an exact, zero-
 /// residual explanation, so the byte-min profile is indifferent among them).
+///
+/// The proposal's search counter is the scalar sweep's counter; surface
+/// normalization is preprocessing and is deliberately not charged (see the
+/// module docs and `work.rs`).
 pub fn propose_seeded_field(asset: &Asset, out: &mut Vec<Proposal>) {
-    let mut work = SearchCounter::default();
-    let Some(gray) = gray_surface_counted(asset, &mut work) else {
+    // DEFAULT_SEED_SWEEP_RANGE <= MAX_SEED_SWEEP_RANGE by construction, so
+    // the Result is Ok; Ok(None) means "not a gray surface".
+    let Ok(Some(sweep)) = sweep_scalar(asset, DEFAULT_SEED_SWEEP_RANGE) else {
         return;
     };
-    let table = anchor_table(asset.w, &gray, &default_anchors(asset.w, asset.h));
-    let matches = scalar_sweep_gray(
-        asset.w,
-        asset.h,
-        &gray,
-        DEFAULT_SEED_SWEEP_RANGE,
-        &table,
-        &mut work,
-    );
-    let Some(&seed) = matches.first() else {
+    let Some(&seed) = sweep.matches.first() else {
         return;
     };
     out.push(Proposal {
@@ -783,7 +815,7 @@ pub fn propose_seeded_field(asset: &Asset, out: &mut Vec<Proposal>) {
         doc: one_object_doc(crate::procedural::build::noise_field(
             asset.w, asset.h, seed,
         )),
-        work,
+        work: sweep.work,
     });
 }
 
@@ -805,6 +837,13 @@ mod tests {
     /// Field raster helper: gray bytes of the deterministic field for `seed`.
     fn field_asset(w: u32, h: u32, seed: u64) -> Asset {
         gray_asset(w, h, |i, j| gray_value(seed, i, j))
+    }
+
+    /// Unwrap a sweep over a gray surface with an in-cap range: tests
+    /// guarantee both preconditions, so `Ok(Some(sweep))` is expected.
+    fn swept(r: Result<Option<Sweep>, Reject>) -> Sweep {
+        r.expect("in-cap range must not be rejected")
+            .expect("gray surface must sweep")
     }
 
     fn random_gray_asset(w: u32, h: u32, tag: u8) -> Asset {
@@ -860,6 +899,33 @@ mod tests {
     }
 
     #[test]
+    fn oversized_ranges_are_rejected_not_truncated() {
+        // Asking for a 2^30-seed universe must be an explicit error, never a
+        // silent clip to [0, 2^24): "no match" must mean "no match in the
+        // requested universe".
+        let g = field_asset(4, 4, 3);
+        let too_big = MAX_SEED_SWEEP_RANGE + 1;
+        assert_eq!(sweep_scalar(&g, too_big), Err(Reject::CountExceedsLimit));
+        assert_eq!(sweep_auto(&g, too_big), Err(Reject::CountExceedsLimit));
+        // the range check precedes the ISA check, so every backend rejects
+        // identically on every host
+        assert_eq!(sweep_avx2(&g, too_big), Err(Reject::CountExceedsLimit));
+        assert_eq!(sweep_avx512(&g, too_big), Err(Reject::CountExceedsLimit));
+        // the range error also precedes the surface check
+        let mut data = vec![9u8; 4 * 4 * 4];
+        data[0] = 5; // colorful: not a gray surface
+        let c = Asset::new(4, 4, ColorFormat::Rgba8, data).unwrap();
+        assert_eq!(sweep_scalar(&c, too_big), Err(Reject::CountExceedsLimit));
+        // the cap itself is accepted: a non-gray surface returns Ok(None)
+        // after the range check passes (no 2^24-seed sweep runs)
+        assert_eq!(sweep_scalar(&c, MAX_SEED_SWEEP_RANGE), Ok(None));
+        // a zero-length requested universe is legal and trivially empty
+        let s = swept(sweep_scalar(&g, 0));
+        assert!(s.matches.is_empty());
+        assert_eq!(s.work.total_units(), 0);
+    }
+
+    #[test]
     fn scalar_sweep_finds_the_seed_and_only_the_seed() {
         for &(w, h, seed) in &[
             (32u32, 24u32, 0u64),
@@ -868,7 +934,7 @@ mod tests {
             (8, 8, 4242),
         ] {
             let a = field_asset(w, h, seed);
-            let s = sweep_scalar(&a, 1 << 16).unwrap();
+            let s = swept(sweep_scalar(&a, 1 << 16));
             assert_eq!(s.backend, SweepBackend::Scalar);
             assert_eq!(s.matches, vec![seed], "{w}x{h} seed {seed}");
             assert!(s.work.hash_ops > 0);
@@ -877,17 +943,18 @@ mod tests {
 
     #[test]
     fn scalar_sweep_rejects_unmodeled_surfaces() {
-        // SHA-256-derived pseudo-random gray bytes are not a deterministic
-        // field over [0, 1<<16) with overwhelming probability.
+        // Independently generated SHA-256-derived gray bytes: no exact match
+        // in the evaluated sweep universe [0, 1<<16) with overwhelming
+        // probability.
         let a = random_gray_asset(16, 16, 0x5e);
-        assert!(sweep_scalar(&a, 1 << 16).unwrap().matches.is_empty());
+        assert!(swept(sweep_scalar(&a, 1 << 16)).matches.is_empty());
     }
 
     #[test]
     fn sweep_is_deterministic_and_ascending() {
         let a = field_asset(20, 12, 4242);
-        let s1 = sweep_scalar(&a, 1 << 12).unwrap();
-        let s2 = sweep_scalar(&a, 1 << 12).unwrap();
+        let s1 = swept(sweep_scalar(&a, 1 << 12));
+        let s2 = swept(sweep_scalar(&a, 1 << 12));
         assert_eq!(s1.matches, s2.matches);
         assert_eq!(s1.work, s2.work);
         let mut sorted = s1.matches.clone();
@@ -901,7 +968,7 @@ mod tests {
         // must be found (anchors are only a prefilter; acceptance is the
         // full-surface check).
         let a = field_asset(1, 1, 5);
-        let s = sweep_scalar(&a, 4096).unwrap();
+        let s = swept(sweep_scalar(&a, 4096));
         assert!(!s.matches.is_empty());
         let expect: Vec<u64> = (0..4096u64)
             .filter(|&seed| gray_value(seed, 0, 0) == gray_value(5, 0, 0))
@@ -917,13 +984,13 @@ mod tests {
             data.extend_from_slice(&[v, v, v, 255]);
         }
         let a = Asset::new(16, 16, ColorFormat::Rgba8, data.clone()).unwrap();
-        let s = sweep_scalar(&a, 1 << 16).unwrap();
+        let s = swept(sweep_scalar(&a, 1 << 16));
         assert_eq!(s.matches, vec![4242]);
-        // colorful surface: not a gray surface -> no sweep
+        // colorful surface: not a gray surface -> Ok(None), no sweep
         let mut colorful = data;
         colorful[0] = 1;
         let a2 = Asset::new(16, 16, ColorFormat::Rgba8, colorful).unwrap();
-        assert!(sweep_scalar(&a2, 1 << 16).is_none());
+        assert!(sweep_scalar(&a2, 1 << 16).unwrap().is_none());
     }
 
     // ---- x86_64 SIMD parity -------------------------------------------------
@@ -931,9 +998,9 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn parity_case(w: u32, h: u32, seed: u64, range: u64) {
         let a = field_asset(w, h, seed);
-        let scalar = sweep_scalar(&a, range).unwrap();
+        let scalar = swept(sweep_scalar(&a, range));
         if has_avx2() {
-            let s = sweep_avx2(&a, range).expect("avx2 sweep on avx2 host");
+            let s = swept(sweep_avx2(&a, range));
             assert_eq!(s.backend, SweepBackend::Avx2);
             assert_eq!(
                 s.matches, scalar.matches,
@@ -941,7 +1008,7 @@ mod tests {
             );
         }
         if has_avx512() {
-            let s = sweep_avx512(&a, range).expect("avx512 sweep on avx512 host");
+            let s = swept(sweep_avx512(&a, range));
             assert_eq!(
                 s.matches, scalar.matches,
                 "avx512 accept set must equal scalar ({w}x{h} seed {seed} range {range})"
@@ -964,12 +1031,12 @@ mod tests {
     #[test]
     fn simd_sweep_rejects_unmodeled_surfaces_identically() {
         let a = random_gray_asset(16, 16, 0x77);
-        let scalar = sweep_scalar(&a, 1 << 16).unwrap();
+        let scalar = swept(sweep_scalar(&a, 1 << 16));
         if has_avx2() {
-            assert_eq!(sweep_avx2(&a, 1 << 16).unwrap().matches, scalar.matches);
+            assert_eq!(swept(sweep_avx2(&a, 1 << 16)).matches, scalar.matches);
         }
         if has_avx512() {
-            assert_eq!(sweep_avx512(&a, 1 << 16).unwrap().matches, scalar.matches);
+            assert_eq!(swept(sweep_avx512(&a, 1 << 16)).matches, scalar.matches);
         }
     }
 
@@ -1011,15 +1078,15 @@ mod tests {
     #[test]
     fn auto_dispatch_accepts_and_records_path() {
         let a = field_asset(12, 12, 3);
-        let s = sweep_auto(&a, 1 << 16).expect("auto sweep");
+        let s = swept(sweep_auto(&a, 1 << 16));
         assert_eq!(s.matches, vec![3]);
         match s.backend {
             SweepBackend::Scalar | SweepBackend::Avx2 | SweepBackend::Avx512 => {}
         }
-        // non-gray surface: None
+        // non-gray surface: Ok(None)
         let mut data = vec![9u8; 12 * 12 * 4];
         data[0] = 5;
         let c = Asset::new(12, 12, ColorFormat::Rgba8, data).unwrap();
-        assert!(sweep_auto(&c, 1 << 16).is_none());
+        assert!(sweep_auto(&c, 1 << 16).unwrap().is_none());
     }
 }

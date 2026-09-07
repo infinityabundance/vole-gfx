@@ -75,7 +75,8 @@ fn field_and_sprites(at: &[(i32, i32)]) -> Asset {
 
 /// Deterministic SHA-256-derived pseudo-random RGBA raster, canonicalized
 /// through the materializer (a real baked asset is a materializer output).
-/// Outside every U1 generator family: the honest negative control.
+/// Independently generated control bytes: no detector in the evaluated set
+/// matches them exactly (receipted) — the honest negative control.
 fn random_asset() -> Asset {
     let mut data = Vec::new();
     for j in 0..24u32 {

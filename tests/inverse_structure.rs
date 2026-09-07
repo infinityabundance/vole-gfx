@@ -158,8 +158,10 @@ fn gray_sprite_on_field() {
     assert_all_survivors_exact(&a, &f);
 }
 
-/// Random-bytes raster (negative control input): deterministic SHA-256-
-/// derived pseudo-random RGBA bytes that no U1 generator family produces.
+/// Random-bytes raster (negative control input): independently generated
+/// SHA-256 pseudo-random RGBA bytes — the tests assert that no structural/
+/// analytic/seeded explanation in the evaluated universes matches them
+/// exactly.
 fn noise_asset() -> Asset {
     let mut data = Vec::new();
     for j in 0..24u32 {

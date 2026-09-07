@@ -30,8 +30,10 @@ The deterministic gray-noise family (`DETERMINISTIC_FIELD`, gray value
   `DEFAULT_SEED_SWEEP_RANGE` (2¹⁶) and the smallest matching seed, so a
   baked noise-field asset unbakes to the exact generator (~144 B persistent,
   zero residual) instead of falling back to literal.
-- **Negative controls** are now SHA-256 pseudo-random bytes canonicalized
-  through the materializer (no U1 generator family produces them); the
+- **Negative controls** are independently generated SHA-256 pseudo-random
+  bytes canonicalized through the materializer; the claim is precise and
+  receipted — no exact match exists in the *evaluated* seed-sweep universe
+  (the gate asserts it) — not a universal claim about every U1 family.  The
   fractal family is seeded but *not* part of the Phase K searched universe
   and stays on the literal fallback (receipted, Phase-K gate).
 
@@ -68,8 +70,24 @@ The deterministic gray-noise family (`DETERMINISTIC_FIELD`, gray value
 ## Search-work and byte accounting (frozen U1 model)
 
 The search axis of the frontier is a **faithful count of real deterministic
-operations**, not a flat `sample_count()`.  Every detector carries a
-`SearchCounter` (`work.rs`) whose frozen conversion is
+search operations**, not a flat `sample_count()`.  Its boundary (normative;
+see `work.rs`) is
+
+```text
+W_search = W_discovery + W_discrimination
+```
+
+hypothesis discovery (detector scans, membership probes, per-seed anchor
+evaluations) plus candidate discrimination (full-surface survivor
+verification, crop grouping).  **Outside** the metric: preprocessing/format
+normalization (deriving the gray surface — the Phase-K detector and sweeps
+charge Gray8 and RGBA surfaces identically, i.e. zero units for it),
+representation construction (lifting crops into objects — bounded by content
+size, reflected in persistent bytes), and wall-clock setup (receipted as
+`*_ns`, never as work units).
+
+Every detector carries a `SearchCounter` (`work.rs`) whose frozen conversion
+is
 
 ```text
 search_work = pixels_read + code_compares + hash_ops
@@ -85,14 +103,14 @@ with each field incremented exactly where the operation occurs:
   compares, including the failing pair that rejects a period);
 - `crop_bytes_compared`: bytes compared in byte-granular crop equality
   (structural grouping; early exit is data-exact);
-- `hash_ops` / `candidate_tests`: zero for the Phase I/J scalar detectors;
-  `hash_ops` counts seed-hash evaluations of the Phase K seed sweep (one per
-  anchor/sample hash evaluated, exact per backend), and `candidate_tests` is
-  reserved for the batched hypothesis-verification phases (L–M).
+- `hash_ops`: one per seed-hash evaluated by the Phase K sweep (anchor and
+  full-surface verification hashes, exact per backend);
+- `candidate_tests`: reserved for the batched hypothesis-verification phases
+  (L–M); zero through Phase K, where candidate evaluation is the separate
+  `materialize_work` axis.
 
 Control flow (index arithmetic, `u32` width compares, `BTreeMap`
-bookkeeping) and candidate construction (lifting a crop into a raster
-object) are deliberately not counted.  When a detector emits several
+bookkeeping) is deliberately not counted.  When a detector emits several
 proposals from one shared scan, each proposal carries the shared scan cost
 (conservative attribution).  The literal fallback carries **zero** search
 cost: it is always present and requires no scan.  The Phase K seeded-field

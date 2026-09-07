@@ -7,6 +7,44 @@
 //! the surface, while the tiled detector re-scans per candidate period and
 //! structural grouping byte-compares crops against crops.
 //!
+//! # Boundary of the metric
+//!
+//! The U1 search-work metric counts **deterministic search operations only**, in
+//! two phases:
+//!
+//! ```text
+//! W_search = W_discovery + W_discrimination
+//! ```
+//!
+//! * `W_discovery` (hypothesis discovery): operations that generate or scan
+//!   candidate hypotheses — detector scans, membership probes, per-seed
+//!   anchor evaluations in the seed sweep.
+//! * `W_discrimination` (candidate discrimination): operations that verify or
+//!   reject a specific hypothesis — full-surface survivor verification in the
+//!   seed sweep, byte-exact crop grouping.
+//!
+//! Deliberately **outside** the metric (bounded by construction, or receipted
+//! separately):
+//!
+//! * *preprocessing / format normalization* — deriving the gray surface from
+//!   an asset (an O(w·h) clone for Gray8 or code walk for RGBA, identical for
+//!   every asset of a given surface; the Phase-K detector and sweeps do not
+//!   charge it);
+//! * *representation construction* — lifting crops/tiles into candidate
+//!   objects (bounded by content size and reflected in the candidate's
+//!   persistent bytes);
+//! * *wall-clock setup* — allocation, dispatch, context — receipted as time
+//!   (`*_ns`), never as work units;
+//! * scalar control flow and index arithmetic (`u32` width compares,
+//!   `BTreeMap` bookkeeping).
+//!
+//! The boundary is frozen U1 text, not a per-court convenience: nobody may
+//! argue later that the cost model was adjusted opportunistically to make a
+//! candidate win.  A consequence of the boundary: format normalization is
+//! format-symmetric in the metric (Gray8 and RGBA surfaces both pay zero
+//! discovery/discrimination units for it), even though the raw walks differ
+//! in bytes.
+//!
 //! # Frozen U1 conversion
 //!
 //! `SearchCounter` accumulates five disjoint operation classes; the frozen
@@ -27,30 +65,25 @@
 //!   code values (a row/column uniformity compare counts its `w`/`h` whole
 //!   codes; the tiled period scan counts every sample pair it compares,
 //!   including the failing one).
-//! * `hash_ops` — one deterministic hash/seed evaluation.  Reserved for the
-//!   seeded-field and batched-search phases (K–M); the Phase I/J scalar
-//!   detectors evaluate no hashes and leave this at zero.
+//! * `hash_ops` — one deterministic hash/seed evaluation.  The Phase-K seed
+//!   sweep charges one per anchor/sample hash evaluated (exactly where
+//!   executed, per backend); the Phase I/J detectors evaluate no hashes.
 //! * `candidate_tests` — one full-candidate hypothesis verification.
-//!   Reserved for the batched-search phases; in Phase I/J, candidate
+//!   Reserved for the batched-search phases; in Phase I/J/K, candidate
 //!   evaluation cost is a separate declared axis (`materialize_work`), so
 //!   finalize does not charge the detector counters for it.
 //! * `crop_bytes_compared` — one byte compared during byte-granular
 //!   crop-content equality (structural grouping); early exit is data-exact.
 //!
-//! Deliberately **not** counted (control flow and candidate construction):
-//! index arithmetic, width/count comparisons on `u32` scalars, `BTreeMap`
-//! bookkeeping, and the final byte copy that lifts a crop into a raster
-//! object (that copy is candidate *construction*, not search; its cost is
-//! bounded by content size and reflected in the candidate's persistent
-//! bytes).  The model therefore over-counts nothing and under-counts only
-//! unmodeled scalar control work; it is deterministic for a given asset and
-//! identical across hosts.
+//! The model therefore over-counts nothing and under-counts only unmodeled
+//! scalar control work; it is deterministic for a given asset and identical
+//! across hosts.
 //!
 //! Detector attribution rule: a proposal's counter is the full deterministic
-//! scan work of its detector (each scan operation increments exactly once),
-//! so when a detector emits several proposals from one shared scan each
-//! proposal carries the shared scan cost — a conservative per-candidate
-//! charge that keeps frontier comparisons reproducible.
+//! discovery/discrimination work of its detector (each operation increments
+//! exactly once), so when a detector emits several proposals from one shared
+//! scan each proposal carries the shared scan cost — a conservative
+//! per-candidate charge that keeps frontier comparisons reproducible.
 //!
 //! Because `search_work` is a *frontier* axis, changing a detector's counting
 //! changes the cost rows but never the semantics of what a proposal is;
@@ -63,9 +96,12 @@ pub struct SearchCounter {
     pub pixels_read: u64,
     /// One whole-code equality decision between two samples.
     pub code_compares: u64,
-    /// One deterministic hash/seed evaluation (phases K–M; zero in I/J).
+    /// One deterministic hash/seed evaluation (Phase K seed sweep: one per
+    /// anchor/sample hash executed; zero in the Phase I/J detectors).
     pub hash_ops: u64,
-    /// One full-candidate hypothesis verification (phases K–M; zero in I/J).
+    /// One full-candidate hypothesis verification (reserved for the
+    /// batched-search phases L–M; zero through Phase K, where candidate
+    /// evaluation is the separate `materialize_work` axis).
     pub candidate_tests: u64,
     /// One byte compared in a byte-granular crop equality test.
     pub crop_bytes_compared: u64,

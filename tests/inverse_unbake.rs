@@ -223,12 +223,13 @@ fn gray_asset_unbakes_in_gray_space() {
     assert_all_survivors_exact(&a, &f);
 }
 
-/// Negative control: high-entropy SHA-256 bytes (not producible by any U1
-/// generator family) must fall back to the literal raster under the byte-min
-/// profile (its generator proposals carry a near-full residual and are
-/// dominated or dominated-in-profile).  The bytes are canonicalized through
-/// the materializer: a real baked asset is a materializer output, so
-/// fully-transparent codes canonicalize to (0,0,0,0).
+/// Negative control: high-entropy, independently generated SHA-256 bytes
+/// with no exact match in the evaluated detector universe must fall back to
+/// the literal raster under the byte-min profile (its generator proposals
+/// carry a near-full residual and are dominated or dominated-in-profile).
+/// The bytes are canonicalized through the materializer: a real baked asset
+/// is a materializer output, so fully-transparent codes canonicalize to
+/// (0,0,0,0).
 #[test]
 fn random_noise_asset_falls_back_to_literal() {
     // deterministic SHA-256-derived pseudo-random RGBA raster (per sample)
