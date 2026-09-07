@@ -1,6 +1,13 @@
 # VOLE-GFX
 
+<img src="assets/vole.png" alt="VOLE-GFX" width="313" height="313" />
+
 **Deterministic procedural visual state as a graphics intermediate representation.**
+
+> De Beer, R. (2026). VOLE-GFX: Deterministic Procedural Visual State as a
+> Graphics Intermediate Representation — Broad Prior-Art Technical Disclosure
+> and Research Architecture (Version v1.0). Zenodo.
+> <https://doi.org/10.5281/zenodo.22583102>
 
 VOLE-GFX implements, as one native-Rust crate, the architecture disclosed in
 *VOLE: Procedural Video Storage and Transport by Deterministic State
