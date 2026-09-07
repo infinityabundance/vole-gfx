@@ -1,9 +1,9 @@
 [package]
 name = "vole-gfx"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.89"
-description = "VOLE-GFX: deterministic procedural visual state as a graphics intermediate representation. One crate: exact U1 semantics (vole.gfx.u1), canonical IR, scalar/blocked/AVX2/AVX-512/Rayon/CUDA materializers, seeded procedural generator fields with direct seeded evaluation, scalar+structural inverse procedural compiler (exact search-work accounting, Pareto frontiers), evidence receipts."
+description = "VOLE-GFX: deterministic procedural visual state as a graphics intermediate representation. One crate: exact U1 semantics (vole.gfx.u1), canonical IR, scalar/blocked/AVX2/AVX-512/Rayon/CUDA materializers, seeded procedural generator fields with direct seeded evaluation, scalar+SIMD (AVX2/AVX-512) inverse procedural compiler: unbaking with exact search-work accounting, seeded-field seed sweeps, Pareto frontiers."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/infinityabundance/vole-gfx"
 keywords = ["procedural", "graphics", "materialization", "ir", "deterministic"]
