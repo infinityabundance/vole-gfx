@@ -6,12 +6,16 @@
 //! dimensions of Phase I are complete, **deterministic** cost rows:
 //!
 //! * persistent bytes (canonical IR of the procedural explanation),
-//! * residual bytes (sparse-overwrite payload),
+//! * residual bytes (canonical bytes of the residual binding: payload plus
+//!   structural overhead — `encode(doc_with_residual) - persistent_bytes`),
 //! * materialization work (a host-independent work model: requested samples
 //!   x per-sample generator/raster cost — measured wall-clock latency is
 //!   reported in receipts but never decides dominance, keeping the frontier
 //!   deterministic),
-//! * search work (bounded detector work units, deterministic).
+//! * search work (the detector's deterministic `SearchCounter`; the frozen
+//!   `total_units()` conversion counts every scan operation where it
+//!   occurs — period re-scans, flood-fill probes, crop byte compares — see
+//!   `work.rs`).
 //!
 //! The non-dominated set is kept in deterministic detector order.  A profile
 //! may then pick one point from the frontier (e.g. minimum total bytes); any
@@ -35,7 +39,7 @@ impl Costs {
             persistent_bytes: c.persistent_bytes,
             residual_bytes: c.residual_bytes,
             materialize_work: c.materialize_work,
-            search_work: c.search_work,
+            search_work: c.search.total_units(),
         }
     }
 
@@ -55,6 +59,39 @@ impl Costs {
             || self.materialize_work < o.materialize_work
             || self.search_work < o.search_work;
         ge && strictly_better
+    }
+}
+
+/// One deterministic frontier summary row for receipts/reports: the four
+/// declared cost axes plus the search-work breakdown.
+#[derive(Debug, Clone)]
+pub struct Row {
+    pub name: String,
+    pub persistent_bytes: u64,
+    pub residual_bytes: u64,
+    pub materialize_work: u64,
+    pub search_work: u64,
+    pub pixels_read: u64,
+    pub code_compares: u64,
+    pub hash_ops: u64,
+    pub candidate_tests: u64,
+    pub crop_bytes_compared: u64,
+}
+
+impl Row {
+    fn of(c: &Candidate) -> Row {
+        Row {
+            name: c.name.clone(),
+            persistent_bytes: c.persistent_bytes,
+            residual_bytes: c.residual_bytes,
+            materialize_work: c.materialize_work,
+            search_work: c.search.total_units(),
+            pixels_read: c.search.pixels_read,
+            code_compares: c.search.code_compares,
+            hash_ops: c.search.hash_ops,
+            candidate_tests: c.search.candidate_tests,
+            crop_bytes_compared: c.search.crop_bytes_compared,
+        }
     }
 }
 
@@ -98,21 +135,10 @@ impl Frontier {
         })
     }
 
-    /// Deterministic summary rows for receipts/reports.
-    pub fn rows(&self) -> Vec<(String, u64, u64, u64, u64)> {
-        // (name, persistent, residual, materialize_work, search_work)
-        self.candidates
-            .iter()
-            .map(|c| {
-                (
-                    c.name.clone(),
-                    c.persistent_bytes,
-                    c.residual_bytes,
-                    c.materialize_work,
-                    c.search_work,
-                )
-            })
-            .collect()
+    /// Deterministic summary rows for receipts/reports: each candidate's
+    /// four declared cost axes plus its search-work breakdown.
+    pub fn rows(&self) -> Vec<Row> {
+        self.candidates.iter().map(Row::of).collect()
     }
 }
 
@@ -128,7 +154,7 @@ mod tests {
             doc: Document::new(),
             persistent_bytes: p,
             residual_bytes: r,
-            search_work: s,
+            search: crate::inverse::work::SearchCounter::from_total_units(s),
             materialize_work: m,
             materialize_ns: 0,
             output_hash: String::new(),

@@ -11,10 +11,13 @@
 //! origins (`sprite-repeat` when a class occurs >= 2 times, otherwise
 //! `sprite-on-field`).  Interior background pixels inside a crop are stored
 //! verbatim, so byte-exactness is preserved by construction and re-verified
-//! by evaluation.  All scans are deterministic and work-counted.
+//! by evaluation.  All scans are deterministic and **counted exactly where
+//! they occur** (`SearchCounter`): every field-color sample read, every
+//! flood-fill foreground probe, and every byte compared between crops.
 
 use super::asset::Asset;
 use super::detect::Proposal;
+use super::work::SearchCounter;
 use crate::color::{ColorFormat, Rgba};
 use crate::ir::{Document, Instance, Object};
 use crate::procedural::build;
@@ -31,6 +34,16 @@ fn code_key(asset: &Asset, o: usize) -> [u8; 4] {
     c
 }
 
+/// One foreground probe: materialize the sample's code and decide whether it
+/// differs from the field color (1 read + 1 whole-code compare, counted).
+#[inline]
+fn is_fg(asset: &Asset, i: u32, j: u32, bg: [u8; 4], w: &mut SearchCounter) -> bool {
+    w.read_pixels(1);
+    let k = code_key(asset, asset.offset(i, j));
+    w.compare_codes(1);
+    k != bg
+}
+
 /// Most frequent code value (the field color), deterministically chosen.
 ///
 /// Selection rule (normative for the inverse search): highest frequency;
@@ -41,13 +54,15 @@ fn code_key(asset: &Asset, o: usize) -> [u8; 4] {
 ///
 /// The accumulator is a `BTreeMap` (deterministic key order) so the winner
 /// is process-independent; `HashMap` iteration order is deliberately
-/// randomized and must never influence a search decision.
-fn field_color(asset: &Asset) -> Option<[u8; 4]> {
+/// randomized and must never influence a search decision.  Each sample's
+/// code materialization is counted (reads).
+fn field_color(asset: &Asset, w: &mut SearchCounter) -> Option<[u8; 4]> {
     // code -> (count, first row-major index)
     let mut tab: BTreeMap<[u8; 4], (u64, u64)> = BTreeMap::new();
     for j in 0..asset.h {
         for i in 0..asset.w {
             let idx = (j as u64) * asset.w as u64 + i as u64;
+            w.read_pixels(1);
             let k = code_key(asset, asset.offset(i, j));
             let e = tab.entry(k).or_insert((0, idx));
             e.0 += 1;
@@ -69,20 +84,23 @@ struct Component {
 }
 
 /// Label 4-connected components of pixels != `bg`; returns their bounding
-/// crops in deterministic (row-major seed) order.
-fn components(asset: &Asset, bg: [u8; 4]) -> Vec<Component> {
-    let (w, h) = (asset.w as usize, asset.h as usize);
-    let mut visited = vec![false; w * h];
+/// crops in deterministic (row-major seed) order.  Every foreground probe
+/// (outer scan + flood-fill neighbor checks) is counted.
+fn components(asset: &Asset, bg: [u8; 4], w: &mut SearchCounter) -> Vec<Component> {
+    let (wd, h) = (asset.w as usize, asset.h as usize);
+    let mut visited = vec![false; wd * h];
     let mut out = Vec::new();
-    let is_fg = |i: u32, j: u32| code_key(asset, asset.offset(i, j)) != bg;
     for j in 0..h {
-        for i in 0..w {
-            if visited[j * w + i] || !is_fg(i as u32, j as u32) {
+        for i in 0..wd {
+            if visited[j * wd + i] {
+                continue;
+            }
+            if !is_fg(asset, i as u32, j as u32, bg, w) {
                 continue;
             }
             // flood fill (bounded stack: at most n entries)
             let mut stack: Vec<(u32, u32)> = vec![(i as u32, j as u32)];
-            visited[j * w + i] = true;
+            visited[j * wd + i] = true;
             let (mut x0, mut y0, mut x1, mut y1) = (i as u32, j as u32, i as u32 + 1, j as u32 + 1);
             while let Some((x, y)) = stack.pop() {
                 x0 = x0.min(x);
@@ -95,9 +113,9 @@ fn components(asset: &Asset, bg: [u8; 4]) -> Vec<Component> {
                     (x, y.wrapping_sub(1)),
                     (x, y + 1),
                 ] {
-                    if nx < asset.w && ny < asset.h && !visited[ny as usize * w + nx as usize] {
-                        visited[ny as usize * w + nx as usize] = true;
-                        if is_fg(nx, ny) {
+                    if nx < asset.w && ny < asset.h && !visited[ny as usize * wd + nx as usize] {
+                        visited[ny as usize * wd + nx as usize] = true;
+                        if is_fg(asset, nx, ny, bg, w) {
                             stack.push((nx, ny));
                         }
                     }
@@ -109,18 +127,24 @@ fn components(asset: &Asset, bg: [u8; 4]) -> Vec<Component> {
     out
 }
 
-/// Byte-equal content comparison of two same-size crops.
-fn crops_equal(asset: &Asset, a: &Component, b: &Component) -> bool {
+/// Byte-equal content comparison of two same-size crops.  Counts every byte
+/// actually compared (data-exact early exit at the first differing byte).
+fn crops_equal(asset: &Asset, a: &Component, b: &Component, w: &mut SearchCounter) -> bool {
     debug_assert_eq!(a.x1 - a.x0, b.x1 - b.x0);
     debug_assert_eq!(a.y1 - a.y0, b.y1 - b.y0);
     let bps = asset.format.bytes_per_sample();
     let (cw, ch) = (a.x1 - a.x0, a.y1 - a.y0);
     for j in 0..ch {
+        let oa_row = asset.offset(a.x0, a.y0 + j);
+        let ob_row = asset.offset(b.x0, b.y0 + j);
         for i in 0..cw {
-            let oa = asset.offset(a.x0 + i, a.y0 + j);
-            let ob = asset.offset(b.x0 + i, b.y0 + j);
-            if asset.data[oa..oa + bps] != asset.data[ob..ob + bps] {
-                return false;
+            let oa = oa_row + i as usize * bps;
+            let ob = ob_row + i as usize * bps;
+            for k in 0..bps {
+                w.compare_crop_bytes(1);
+                if asset.data[oa + k] != asset.data[ob + k] {
+                    return false;
+                }
             }
         }
     }
@@ -128,6 +152,9 @@ fn crops_equal(asset: &Asset, a: &Component, b: &Component) -> bool {
 }
 
 /// A raster object of the crop contents (interior field pixels included).
+/// Lifting the crop bytes into the proposal object is candidate
+/// *construction* (bounded by content size; reflected in the candidate's
+/// persistent bytes), so it is deliberately not counted as search work.
 fn crop_object(asset: &Asset, c: &Component) -> Object {
     let (cw, ch) = (c.x1 - c.x0, c.y1 - c.y0);
     let bps = asset.format.bytes_per_sample();
@@ -181,10 +208,11 @@ pub fn propose(asset: &Asset, out: &mut Vec<Proposal>) {
     if asset.w > 512 || asset.h > 512 {
         return; // search bounded; larger assets keep Phase I + fallback
     }
-    let Some(bg) = field_color(asset) else {
+    let mut w = SearchCounter::default();
+    let Some(bg) = field_color(asset, &mut w) else {
         return;
     };
-    let comps = components(asset, bg);
+    let comps = components(asset, bg, &mut w);
     if comps.is_empty() {
         return; // uniform: the constant detector covers it
     }
@@ -199,7 +227,7 @@ pub fn propose(asset: &Asset, out: &mut Vec<Proposal>) {
         return;
     }
     // group components by identical content (deterministic: first occurrence
-    // order)
+    // order); each same-size crop pair is byte-compared (counted)
     let mut classes: Vec<(Component, Vec<Component>)> = Vec::new();
     loop {
         if candidates.is_empty() {
@@ -211,7 +239,7 @@ pub fn propose(asset: &Asset, out: &mut Vec<Proposal>) {
         let (fcw, fch) = (first.x1 - first.x0, first.y1 - first.y0);
         for c in candidates {
             let (ccw, cch) = (c.x1 - c.x0, c.y1 - c.y0);
-            if ccw == fcw && cch == fch && crops_equal(asset, &first, &c) {
+            if ccw == fcw && cch == fch && crops_equal(asset, &first, &c, &mut w) {
                 members.push(c);
             } else {
                 rest.push(c);
@@ -229,7 +257,6 @@ pub fn propose(asset: &Asset, out: &mut Vec<Proposal>) {
     if cw == 0 || ch == 0 || cw > MAX_CROP_DIM || ch > MAX_CROP_DIM {
         return;
     }
-    let scan_work = asset.sample_count() * 2;
     let bg_color = match asset.format {
         ColorFormat::Rgba8 => Rgba::from_bytes(bg),
         ColorFormat::Gray8 => Rgba::gray(bg[0]),
@@ -241,13 +268,13 @@ pub fn propose(asset: &Asset, out: &mut Vec<Proposal>) {
         out.push(Proposal {
             name: "sprite-repeat",
             doc: composite_doc(field, sprite, &at),
-            work: scan_work,
+            work: w,
         });
     } else {
         out.push(Proposal {
             name: "sprite-on-field",
             doc: composite_doc(field, sprite, &at),
-            work: scan_work,
+            work: w,
         });
     }
 }
@@ -255,7 +282,6 @@ pub fn propose(asset: &Asset, out: &mut Vec<Proposal>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::color::Rgba;
 
     fn asset_of(data: &[[u8; 4]], w: u32, h: u32) -> Asset {
         let bytes: Vec<u8> = data.iter().flatten().copied().collect();
@@ -274,7 +300,11 @@ mod tests {
         // green appears first, but red is more frequent
         let data = vec![b, a, a, a, b, a, a, a];
         let asset = asset_of(&data, 8, 1);
-        assert_eq!(field_color(&asset), Some(a));
+        let mut w = SearchCounter::default();
+        assert_eq!(field_color(&asset, &mut w), Some(a));
+        // the whole surface was read once
+        assert_eq!(w.pixels_read, asset.sample_count());
+        assert_eq!(w.code_compares, 0);
     }
 
     /// Adversarial tie: two colors with EXACTLY equal frequency.  The winner
@@ -295,7 +325,8 @@ mod tests {
             row.push(b);
         }
         let asset = asset_of(&row, 8, 1);
-        assert_eq!(field_color(&asset), Some(a));
+        let mut w = SearchCounter::default();
+        assert_eq!(field_color(&asset, &mut w), Some(a));
 
         // interleaved tie: a,b,a,b,a,b,a,b: a first at 0, b first at 1 -> a
         let mut inter = Vec::new();
@@ -303,7 +334,8 @@ mod tests {
             inter.push(if k % 2 == 0 { a } else { b });
         }
         let asset2 = asset_of(&inter, 8, 1);
-        assert_eq!(field_color(&asset2), Some(a));
+        let mut w2 = SearchCounter::default();
+        assert_eq!(field_color(&asset2, &mut w2), Some(a));
 
         // 2D tie across rows: top row all b, second row all a (equal counts,
         // same first column): b first at row 0 -> b wins by row-major order.
@@ -315,7 +347,8 @@ mod tests {
             grid.push(a); // row 1: a
         }
         let asset3 = asset_of(&grid, 4, 2);
-        assert_eq!(field_color(&asset3), Some(b));
+        let mut w3 = SearchCounter::default();
+        assert_eq!(field_color(&asset3, &mut w3), Some(b));
     }
 
     /// Repeated evaluation must be process-independent: same asset, many
@@ -327,7 +360,7 @@ mod tests {
         let c = rgba(0, 0, 200);
         let mut data = Vec::new();
         // counts: a=8, b=8, c=4 with a's first occurrence earliest
-        for k in 0..4 {
+        for _ in 0..4 {
             data.push(a);
         }
         for _ in 0..4 {
@@ -344,7 +377,8 @@ mod tests {
         }
         let asset = asset_of(&data, 10, 2);
         for _ in 0..32 {
-            assert_eq!(field_color(&asset), Some(a));
+            let mut w = SearchCounter::default();
+            assert_eq!(field_color(&asset, &mut w), Some(a));
         }
     }
 
@@ -356,6 +390,63 @@ mod tests {
         let mut d = vec![200u8, 200, 40, 40];
         d.extend_from_slice(&[200, 200, 40, 40]);
         let asset = Asset::new(8, 1, ColorFormat::Gray8, d).unwrap();
-        assert_eq!(field_color(&asset), Some([200, 0, 0, 0]));
+        let mut w = SearchCounter::default();
+        assert_eq!(field_color(&asset, &mut w), Some([200, 0, 0, 0]));
+    }
+
+    /// The component scan counts every foreground probe it performs: field
+    /// probes (reads + compares) and flood-fill neighbor probes.  A
+    /// structural proposal must therefore report more than a naive single
+    /// pass over the surface.
+    #[test]
+    fn structural_scan_counts_probes_and_crop_bytes() {
+        // 24x20 field of gray-ish blue with two identical 6x5 sprites
+        let bg = [11u8, 22, 33, 255];
+        let mut data: Vec<[u8; 4]> = Vec::new();
+        for j in 0..20u32 {
+            for i in 0..24u32 {
+                let on_sprite = (4..10).contains(&i) && (3..8).contains(&j)
+                    || (14..20).contains(&i) && (11..16).contains(&j);
+                data.push(if on_sprite {
+                    if (i + j) % 3 == 0 {
+                        [200u8, 40, 40, 255]
+                    } else {
+                        [40, 200, 40, 255]
+                    }
+                } else {
+                    bg
+                });
+            }
+        }
+        let bytes: Vec<u8> = data.iter().flatten().copied().collect();
+        let asset = Asset::new(24, 20, ColorFormat::Rgba8, bytes).unwrap();
+
+        let mut w = SearchCounter::default();
+        assert_eq!(field_color(&asset, &mut w), Some(bg));
+        let comps = components(&asset, bg, &mut w);
+        assert_eq!(comps.len(), 2);
+        // two identical crops must byte-compare exactly (6*5*4 bytes)
+        let crop_before = w.crop_bytes_compared;
+        let mut w2 = w;
+        assert!(crops_equal(&asset, &comps[0], &comps[1], &mut w2));
+        assert_eq!(
+            w2.crop_bytes_compared - crop_before,
+            6 * 5 * 4,
+            "byte-exact crop equality must compare every byte of the crop"
+        );
+
+        // the whole pipeline reports real probe work, exceeding one sample
+        // read per pixel (background probes + flood neighbors + crop bytes)
+        let mut full = SearchCounter::default();
+        field_color(&asset, &mut full);
+        let comps2 = components(&asset, bg, &mut full);
+        assert_eq!(comps2.len(), 2);
+        assert!(
+            full.total_units() > asset.sample_count(),
+            "probe work {} should exceed one flat sample-count pass {}",
+            full.total_units(),
+            asset.sample_count()
+        );
+        assert!(full.code_compares > 0, "foreground probes must be counted");
     }
 }

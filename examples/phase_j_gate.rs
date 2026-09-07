@@ -117,13 +117,30 @@ fn main() {
         r.metrics
             .insert(format!("{p}_matwork"), best.materialize_work);
         r.metrics.insert(format!("{p}_ns"), best.materialize_ns);
-        for (name, pers, res, work, search) in inverse::summarize(&f) {
-            let n = format!("{p}_f_{name}");
+        r.metrics
+            .insert(format!("{p}_searchwork"), best.search.total_units());
+        for row in inverse::summarize(&f) {
+            let n = format!("{p}_f_{name}", name = row.name);
             r.outputs
-                .insert(format!("{n}_persistent"), pers.to_string());
-            r.outputs.insert(format!("{n}_residual"), res.to_string());
-            r.outputs.insert(format!("{n}_matwork"), work.to_string());
-            r.outputs.insert(format!("{n}_search"), search.to_string());
+                .insert(format!("{n}_persistent"), row.persistent_bytes.to_string());
+            r.outputs
+                .insert(format!("{n}_residual"), row.residual_bytes.to_string());
+            r.outputs
+                .insert(format!("{n}_matwork"), row.materialize_work.to_string());
+            r.outputs
+                .insert(format!("{n}_search"), row.search_work.to_string());
+            r.outputs
+                .insert(format!("{n}_pixels"), row.pixels_read.to_string());
+            r.outputs
+                .insert(format!("{n}_compares"), row.code_compares.to_string());
+            r.outputs
+                .insert(format!("{n}_hashops"), row.hash_ops.to_string());
+            r.outputs
+                .insert(format!("{n}_candtests"), row.candidate_tests.to_string());
+            r.outputs.insert(
+                format!("{n}_cropbytes"),
+                row.crop_bytes_compared.to_string(),
+            );
         }
         r.notes.push(format!(
             "{p}: winner={} persistent={}B residual={}B exact={} frontier={}",

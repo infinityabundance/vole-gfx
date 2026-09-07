@@ -148,17 +148,32 @@ fn main() {
         r.metrics
             .insert(format!("{p}_matwork"), best.materialize_work);
         r.metrics
-            .insert(format!("{p}_searchwork"), best.search_work);
+            .insert(format!("{p}_searchwork"), best.search.total_units());
         r.metrics.insert(format!("{p}_ns"), best.materialize_ns);
         r.metrics
             .insert(format!("{p}_samples"), c.asset.sample_count());
-        for (name, pers, res, work, search) in inverse::summarize(&f) {
-            let n = format!("{p}_f_{name}");
+        for row in inverse::summarize(&f) {
+            let n = format!("{p}_f_{name}", name = row.name);
             r.outputs
-                .insert(format!("{n}_persistent"), pers.to_string());
-            r.outputs.insert(format!("{n}_residual"), res.to_string());
-            r.outputs.insert(format!("{n}_matwork"), work.to_string());
-            r.outputs.insert(format!("{n}_search"), search.to_string());
+                .insert(format!("{n}_persistent"), row.persistent_bytes.to_string());
+            r.outputs
+                .insert(format!("{n}_residual"), row.residual_bytes.to_string());
+            r.outputs
+                .insert(format!("{n}_matwork"), row.materialize_work.to_string());
+            r.outputs
+                .insert(format!("{n}_search"), row.search_work.to_string());
+            r.outputs
+                .insert(format!("{n}_pixels"), row.pixels_read.to_string());
+            r.outputs
+                .insert(format!("{n}_compares"), row.code_compares.to_string());
+            r.outputs
+                .insert(format!("{n}_hashops"), row.hash_ops.to_string());
+            r.outputs
+                .insert(format!("{n}_candtests"), row.candidate_tests.to_string());
+            r.outputs.insert(
+                format!("{n}_cropbytes"),
+                row.crop_bytes_compared.to_string(),
+            );
         }
         r.notes.push(format!(
             "{p}: winner={} persistent={}B residual={}B matwork={} search={} exact={} frontier={}",
@@ -166,7 +181,7 @@ fn main() {
             best.persistent_bytes,
             best.residual_bytes,
             best.materialize_work,
-            best.search_work,
+            best.search.total_units(),
             exact,
             f.candidates.len()
         ));
@@ -178,7 +193,7 @@ fn main() {
     r.pass = all_pass;
     r.outputs.insert("all_exact".into(), all_pass.to_string());
     r.notes.push(
-        "detector coverage (Phase I scalar): constant, periodic stripes/checker, palette bands, tiled, gradient ramps/bilinear, literal fallback; structural reuse/affine/symmetry detectors and SIMD/Rayon/CUDA search land in phases J-M".into(),
+        "detector coverage (Phase I scalar): constant, periodic stripes/checker, palette bands, tiled, gradient ramps/bilinear, literal fallback; structural reuse/affine/symmetry detectors and SIMD/Rayon/CUDA search land in phases J-M. Search work is counted exactly where it occurs (SearchCounter: pixels read / whole-code compares / crop bytes), not as a flat sample count.".into(),
     );
     let path = emit_receipt(r).expect("emit");
     println!("PHASE I PASS: {all_pass}; receipt {path}");

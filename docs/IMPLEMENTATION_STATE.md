@@ -97,7 +97,7 @@ Cargo package (`vole-gfx`); no workspace, no subcrates.
 - **CLI** (`src/bin/vole-gfx.rs`): `universe`, `inspect`, `validate`,
   `canonicalize`, `materialize`, `evidence verify`, `encode` (JSON authoring
   pending), `example` runner.
-- **Tests**: ~190 unit + integration tests (unit, conformance vectors,
+- **Tests**: ~210 unit + integration tests (unit, conformance vectors,
   differential backends, procedural fields, scalar materialize,
   adversarial/property) plus criterion benches; fmt + clippy `-D warnings`
   clean on default and `cuda` features.
@@ -168,7 +168,12 @@ on this host`.
   over four deterministic axes (persistent bytes, residual bytes,
   host-independent materialization-work model, search work); wall-clock
   latency is receipted but never decides dominance, so frontiers are
-  reproducible.  `min_total_bytes` is the default profile.
+  reproducible.  `min_total_bytes` is the default profile.  Search work is
+  counted exactly where it occurs (`inverse::work::SearchCounter`; frozen
+  `pixels_read + code_compares + hash_ops + candidate_tests +
+  crop_bytes_compared` conversion) and residual bytes are the canonical
+  delta of the residual-bound document over the generator document —
+  `persistent_bytes + residual_bytes` is exactly the stored candidate size.
 - **Evidence**: the phase-i gate unbakes seven asset classes (constant /
   checker / palette-bands / tiled / gradient ramp / bilinear / hash-noise
   negative control): exact families win at ~140–170 B persistent with zero
@@ -189,6 +194,37 @@ on this host`.
   residual, sprite-repeat with 2 copies 570 B, 3 copies 616 B (crop stored
   once, N placements) vs ~12 KB literal; the noise negative control stays on
   literal.  All winners reproduce their assets byte-for-byte.
+
+## Review fixes after 0.2.0 (determinism, search-work and byte accounting)
+
+External review found three methodological defects; all three are fixed,
+committed and receipted on the current main:
+
+1. **Deterministic field-color tie-break** (`inverse::structure`): the
+   dominant-color accumulator is a `BTreeMap` with a normative tie rule
+   (highest frequency, then earliest row-major first occurrence — never the
+   color's numeric value), so an equal-frequency tie can no longer depend on
+   randomized `HashMap` iteration order.  Adversarial tie tests included.
+2. **Honest `search_work` accounting** (`inverse::work`): detectors now
+   carry a `SearchCounter` (pixels read / whole-code compares / hash evals /
+   candidate tests / crop bytes compared; frozen `total_units()` conversion)
+   incremented exactly where work occurs, replacing the flat
+   `sample_count()` stand-in.  The tiled detector now reports its real
+   per-period plane re-scans (e.g. ~129k units vs the old flat 3,072 on the
+   phase-j sprite-on-field court); structural proposals report flood-fill
+   probes and byte-exact crop comparisons; the literal fallback carries zero
+   search cost.  Receipts record the full per-candidate breakdown.
+3. **Residual bytes are a canonical delta**: `residual_bytes =
+   encode(doc_with_residual).len() - persistent_bytes`, so the residual axis
+   includes the binding's structural overhead (event/op/algebra/region/
+   format/length fields) rather than only the raw payload (e.g. +39 B per
+   residual binding on the phase-i/j courts).  `persistent_bytes +
+   residual_bytes` is definitionally the stored candidate size.
+
+On the phase-i and phase-j courts the candidate sets, winners, and the byte
+counts of zero-residual winners are unchanged; only the search axis values
+and residual-carrying candidates' residual deltas shifted (see the current
+`phase-i-*` / `phase-j-*` receipts).
 
 ## What each phase must add before completion
 

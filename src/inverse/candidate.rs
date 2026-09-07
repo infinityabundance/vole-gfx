@@ -5,13 +5,25 @@
 //! R_H = A (-_rho) A_hat                    (sparse-overwrite residual)
 //! ```
 //!
-//! The candidate's cost accounting is complete: persistent bytes (canonical
-//! document), residual bytes, deterministic materialization-work model, and
-//! search work.  Residual closure is part of the candidate document, so
-//! materializing the candidate reproduces the asset byte-for-byte by
-//! construction (gated in tests).
+//! The candidate's cost accounting is complete and definitional:
+//!
+//! * `persistent_bytes` — canonical bytes of the generator-only document
+//!   (no residual);
+//! * `residual_bytes` — canonical bytes of the residual binding, measured as
+//!   `encode(doc_with_residual).len() - persistent_bytes`, so it includes the
+//!   event/op/algebra/region/format/length field overhead, not just the raw
+//!   payload (this matters most for tiny residuals);
+//! * `materialize_work` — the deterministic materialization-work model;
+//! * `search` — the deterministic `SearchCounter` of the detector that found
+//!   the explanation (its frozen `total_units()` is the frontier axis).
+//!
+//! Therefore `persistent_bytes + residual_bytes` is exactly the canonical
+//! size of the stored candidate document.  Residual closure is part of the
+//! candidate document, so materializing the candidate reproduces the asset
+//! byte-for-byte by construction (gated in tests).
 
 use super::asset::Asset;
+use super::work::SearchCounter;
 use crate::color::ColorFormat;
 use crate::fixed::IRect;
 use crate::ir::{Document, Event, Instance, Op};
@@ -25,8 +37,12 @@ pub struct Candidate {
     pub doc: Document,
     /// Canonical bytes of the generator document (no residual).
     pub persistent_bytes: u64,
+    /// Canonical bytes of the residual binding (payload + structural
+    /// overhead): `encode(doc_with_residual) - persistent_bytes`.
     pub residual_bytes: u64,
-    pub search_work: u64,
+    /// Deterministic search work of the detector that produced this
+    /// explanation (frozen `total_units()` conversion; see `work.rs`).
+    pub search: SearchCounter,
     /// Deterministic materialization work model: `samples x per-sample cost`
     /// where the per-sample cost sums the placed instances' generator work
     /// units (+1 per raster).  Host-independent; this is the frontier axis

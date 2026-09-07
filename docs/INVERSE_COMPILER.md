@@ -20,7 +20,8 @@ extraction/composite proposals)**; Phases K–N pending.
    - the literal raster fallback (always a candidate; never skipped).
    Detectors are *proposals*: evaluation measures each proposal's exact
    residual; a wrong proposal simply carries a large residual and is pruned
-   by the frontier (bounded search, counted `search_work`).
+   by the frontier (bounded search, **counted exactly where it occurs** — see
+   “Search-work and byte accounting” below).
 3. **Evaluation** (`candidate.rs`, `mod.rs::finalize`):
    `H -> materialize -> A_hat`, `R_H = A ⊖ A_hat` as a canonical
    sparse-overwrite payload, residual attached, and a byte-exact closure
@@ -33,6 +34,50 @@ extraction/composite proposals)**; Phases K–N pending.
    any future weighted objective must persist its lambdas in receipts.
 5. **Determinism**: detector enumeration, evaluation and the frontier are
    deterministic (same asset → same frontier, gated by tests).
+
+## Search-work and byte accounting (frozen U1 model)
+
+The search axis of the frontier is a **faithful count of real deterministic
+operations**, not a flat `sample_count()`.  Every detector carries a
+`SearchCounter` (`work.rs`) whose frozen conversion is
+
+```text
+search_work = pixels_read + code_compares + hash_ops
+            + candidate_tests + crop_bytes_compared
+```
+
+with each field incremented exactly where the operation occurs:
+
+- `pixels_read`: a sample's code materialized for a scan (early-exiting scans
+  count only the samples actually examined);
+- `code_compares`: a whole-code equality decision (a row-uniformity compare
+  counts its `w` codes; the tiled period scan counts every sample pair it
+  compares, including the failing pair that rejects a period);
+- `crop_bytes_compared`: bytes compared in byte-granular crop equality
+  (structural grouping; early exit is data-exact);
+- `hash_ops` / `candidate_tests`: zero for the Phase I/J scalar detectors;
+  reserved for the batched seeded-field search phases (K–M).
+
+Control flow (index arithmetic, `u32` width compares, `BTreeMap`
+bookkeeping) and candidate construction (lifting a crop into a raster
+object) are deliberately not counted.  When a detector emits several
+proposals from one shared scan, each proposal carries the shared scan cost
+(conservative attribution).  The literal fallback carries **zero** search
+cost: it is always present and requires no scan.
+
+Byte accounting is equally definitional.  `persistent_bytes` is the
+canonical size of the generator-only document; `residual_bytes` is the
+canonical **delta** of the residual-bound document over it,
+
+```text
+residual_bytes = encode(doc_with_residual).len() - persistent_bytes
+```
+
+so the residual axis includes the binding's structural overhead (event / op /
+algebra / region / format / length fields), not just the raw payload —
+material for the tiny residuals where procedural candidates compete on the
+frontier.  `persistent_bytes + residual_bytes` is therefore exactly the
+canonical size of the stored candidate document.
 
 ## Search order (paper §19)
 

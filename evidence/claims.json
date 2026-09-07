@@ -78,7 +78,8 @@
       "statement": "The scalar inverse compiler unbakes raster assets into Pareto frontiers of exact explanations (detectors: constant, 2-color periodic stripes/checker, palette-band cycles, tiled wrap periods, gradient ramps, bilinear corner fit, literal fallback). On the seven-class phase-i court the byte-min profile recovers constant/checker/palette-bands/tiled/bilinear at ~140-170 persistent bytes with zero residual (vs ~literal KBs), the hash-noise negative control falls back to literal, and every winner materializes its asset byte-for-byte (closure gate). Frontiers are deterministic: the four cost axes (persistent bytes, residual bytes, host-independent materialization-work model, search work) exclude measured wall-clock from dominance.",
       "domain": "vole.gfx.u1 exact profile, scalar CPU, this host+commit; see receipt phase-i-*",
       "receipts": [
-        "phase-i-inverse-scalar-2f03ffb941537f32.json"
+        "phase-i-inverse-scalar-2f03ffb941537f32.json",
+        "phase-i-inverse-scalar-b381a4417ebbc7e8.json"
       ]
     },
     {
@@ -87,7 +88,18 @@
       "statement": "Structural reuse detectors extract a dominant field color, label 4-connected foreground components, group byte-equal content classes, and emit composite explanations: sprite-on-field (524 B persistent, zero residual) and sprite-repeat with the crop stored once (570 B for 2 copies, 616 B for 3, vs ~12 KB literal on the phase-j court), with every winner reproducing its asset byte-for-byte; the noise negative control falls back to literal. Composite (multi-object) proposals extend the Phase I Pareto pipeline unchanged.",
       "domain": "vole.gfx.u1 exact profile, scalar CPU, this host+commit; see receipt phase-j-*",
       "receipts": [
-        "phase-j-structural-reuse-7985936f6748b6bc.json"
+        "phase-j-structural-reuse-7985936f6748b6bc.json",
+        "phase-j-structural-reuse-8b849604d0d8be07.json"
+      ]
+    },
+    {
+      "id": "vole-gfx.review.search-work-and-byte-accounting",
+      "status": "demonstrated",
+      "statement": "Search work is now counted exactly where it occurs (inverse::work::SearchCounter; frozen pixels_read + code_compares + hash_ops + candidate_tests + crop_bytes_compared conversion): the tiled detector reports its per-period plane re-scans (129,316 units vs the previous flat 3,072 on the phase-j sprite-on-field court), structural proposals report flood-fill probes and byte-exact crop comparisons, gradient probes on noise report only the samples actually examined, and the literal fallback carries zero search cost; receipts record the per-candidate breakdown. Residual bytes are now the canonical delta encode(doc_with_residual) - persistent_bytes, so they include the residual binding's structural overhead (+39 B per binding on the phase-i/j courts) and persistent + residual equals the exact stored document size by construction. On the phase-i and phase-j courts the candidate sets, profile winners, and the byte counts of zero-residual winners are unchanged; only search-axis values and residual-carrying candidates' residual deltas shifted.",
+      "domain": "vole.gfx.u1 exact profile, scalar CPU inverse compiler, this host+commit; see receipt phase-i-* phase-j-*",
+      "receipts": [
+        "phase-i-inverse-scalar-b381a4417ebbc7e8.json",
+        "phase-j-structural-reuse-8b849604d0d8be07.json"
       ]
     }
   ]
